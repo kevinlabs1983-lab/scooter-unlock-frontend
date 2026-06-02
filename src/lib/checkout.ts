@@ -18,30 +18,9 @@ export interface CheckoutCreateResponse {
   package: PackageInfo
 }
 
-/**
- * API-Basis-URL für Backend-Aufrufe.
- * Dev: leer = relativer Pfad `/api/...` → Vite-Proxy → localhost:3001
- * (vermeidet Mixed-Content, wenn das Frontend per mkcert auf HTTPS läuft).
- * Prod: VITE_API_BASE_URL setzen (z. B. https://api.example.com).
- */
-export function getApiBase(): string {
-  const configured = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/$/, '')
+import { getApiBase } from './api.ts'
 
-  if (import.meta.env.DEV) {
-    if (configured?.startsWith('https://')) {
-      return configured
-    }
-    return ''
-  }
-
-  if (!configured) {
-    throw new Error(
-      'Backend-URL fehlt. Setze VITE_API_BASE_URL für Production-Builds.',
-    )
-  }
-
-  return configured
-}
+export { getApiBase } from './api.ts'
 
 export async function createCheckoutSession(
   packageId: PackageId,

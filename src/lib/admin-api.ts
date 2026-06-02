@@ -1,4 +1,4 @@
-import { getApiBase } from './checkout.ts'
+import { getApiBase } from './api.ts'
 import type { PackageId } from './checkout.ts'
 
 const SESSION_KEY = 'ninebot-admin-authenticated'

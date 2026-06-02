@@ -1,3 +1,4 @@
+import { getApiBase } from './api.ts'
 import { isMockLicense } from './license.ts'
 
 export interface PatchConfig {
@@ -477,7 +478,7 @@ export async function exportPatchedFirmwareViaBackend(
     throw new Error(validation.errors.join(' · '))
   }
 
-  const apiBase = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '')
+  const apiBase = getApiBase()
   if (!apiBase) {
     return
   }
