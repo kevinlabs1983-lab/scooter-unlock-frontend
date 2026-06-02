@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { useOfferCountdown } from '../hooks/useOfferCountdown.ts'
 import { createCheckoutSession, type PackageId } from '../lib/checkout.ts'
 import { getDailySoldKeysCount } from '../lib/daily-sold-keys.ts'
+import { CustomerReviews } from '../components/CustomerReviews.tsx'
 
 interface ProductCardData {
   packageId: PackageId
@@ -93,7 +94,6 @@ const TRUST_ITEMS = [
   '⚡ Sofortiger digitaler Versand',
   '🔄 Reversibel – jederzeit zurücksetzbar',
   '✅ Geld-zurück-Garantie (14 Tage)',
-  '⭐⭐⭐⭐⭐ „4.9/5 Sterne (200+ Bewertungen)“',
 ]
 
 function parseVersionParts(version: string): number[] {
@@ -518,6 +518,9 @@ export default function Shop() {
             <li key={item}>{item}</li>
           ))}
         </ul>
+
+        <CustomerReviews />
+
         <p className="mx-auto mt-6 max-w-3xl text-center text-xs text-muted/80">
           Nach dem Kauf erhältst du deinen Key per E-Mail. Flashing startest du in der{' '}
           <Link to="/tuner" className="text-accent underline">
