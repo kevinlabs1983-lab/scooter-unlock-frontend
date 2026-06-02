@@ -14,8 +14,9 @@ export const router = createBrowserRouter([
     path: '/',
     element: <App />,
     children: [
-      { index: true, element: <Tuner /> },
+      { index: true, element: <Shop /> },
       { path: 'shop', element: <Shop /> },
+      { path: 'tuner', element: <Tuner /> },
       { path: 'success', element: <Success /> },
       { path: 'admin', element: <Admin /> },
       { path: 'impressum', element: <Impressum /> },

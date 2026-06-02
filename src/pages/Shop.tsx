@@ -520,7 +520,7 @@ export default function Shop() {
         </ul>
         <p className="mx-auto mt-6 max-w-3xl text-center text-xs text-muted/80">
           Nach dem Kauf erhältst du deinen Key per E-Mail. Flashing startest du in der{' '}
-          <Link to="/" className="text-accent underline">
+          <Link to="/tuner" className="text-accent underline">
             Scooter Unlock App
           </Link>
           .
