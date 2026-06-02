@@ -27,20 +27,6 @@ function App() {
             >
               Shop
             </NavLink>
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                [
-                  'rounded-lg border px-3 py-1.5 text-xs font-medium transition-all duration-300',
-                  isActive
-                    ? 'border-accent/50 bg-accent/10 text-accent'
-                    : 'border-border text-muted hover:border-accent/40 hover:text-accent',
-                ].join(' ')
-              }
-            >
-              Tuner
-            </NavLink>
           </nav>
         </div>
       </header>
