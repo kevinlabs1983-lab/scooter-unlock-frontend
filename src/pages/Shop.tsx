@@ -5,6 +5,7 @@ import { useOfferCountdown } from '../hooks/useOfferCountdown.ts'
 import { createCheckoutSession, type PackageId } from '../lib/checkout.ts'
 import { getDailySoldKeysCount } from '../lib/daily-sold-keys.ts'
 import { CustomerReviews } from '../components/CustomerReviews.tsx'
+import { ShopFaq } from '../components/ShopFaq.tsx'
 
 interface ProductCardData {
   packageId: PackageId
@@ -511,6 +512,8 @@ export default function Shop() {
           )}
         </div>
       </section>
+
+      <ShopFaq />
 
       <section className="border-t border-border bg-surface/50 px-4 py-10">
         <ul className="mx-auto flex max-w-3xl flex-col gap-3 text-center text-sm text-muted sm:text-left">
