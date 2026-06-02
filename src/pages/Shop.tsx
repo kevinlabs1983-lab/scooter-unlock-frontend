@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useOfferCountdown } from '../hooks/useOfferCountdown.ts'
@@ -123,12 +123,10 @@ function compareVersions(a: string, b: string): number {
 function ProductCard({
   product,
   loading,
-  purchaseAllowed,
   onBuy,
 }: {
   product: ProductCardData
   loading: boolean
-  purchaseAllowed: boolean
   onBuy: () => void
 }) {
   return (
@@ -177,7 +175,7 @@ function ProductCard({
       <button
         type="button"
         onClick={onBuy}
-        disabled={loading || !purchaseAllowed}
+        disabled={loading}
         className="mt-auto flex w-full items-center justify-center gap-2 rounded-xl border border-accent/50 bg-accent/10 py-3 text-sm font-semibold text-accent transition-all duration-300 hover:bg-accent/20 hover:shadow-[0_0_24px_rgba(0,212,255,0.15)] disabled:cursor-not-allowed disabled:opacity-50"
       >
         {loading ? (
@@ -204,6 +202,26 @@ export default function Shop() {
   const [waitlistEmail, setWaitlistEmail] = useState('')
   const [waitlistSent, setWaitlistSent] = useState(false)
   const [legalConsentAccepted, setLegalConsentAccepted] = useState(false)
+  const [agbToastVisible, setAgbToastVisible] = useState(false)
+  const [agbHighlight, setAgbHighlight] = useState(false)
+  const agbConsentRef = useRef<HTMLLabelElement>(null)
+
+  useEffect(() => {
+    if (!agbToastVisible) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => setAgbToastVisible(false), 3000)
+    return () => window.clearTimeout(timeoutId)
+  }, [agbToastVisible])
+
+  const showAgbValidation = () => {
+    setAgbToastVisible(true)
+    setAgbHighlight(true)
+    agbConsentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+    window.setTimeout(() => setAgbHighlight(false), 2000)
+  }
 
   const compatResult = useMemo(() => {
     if (!compatModel) {
@@ -247,7 +265,7 @@ export default function Shop() {
 
   const handleCheckout = async (packageId: PackageId) => {
     if (!legalConsentAccepted) {
-      setCheckoutError('Bitte bestätige die AGB und den Verzicht auf das Widerrufsrecht.')
+      showAgbValidation()
       return
     }
 
@@ -282,6 +300,15 @@ export default function Shop() {
 
   return (
     <div className="animate-fade-in">
+      {agbToastVisible && (
+        <div
+          role="alert"
+          className="fixed bottom-6 left-1/2 z-50 max-w-sm -translate-x-1/2 rounded-xl border border-orange-500/50 bg-red-950/95 px-4 py-3 text-center text-sm font-medium text-orange-100 shadow-lg shadow-red-950/40"
+        >
+          Bitte akzeptiere zuerst die AGB, um fortzufahren.
+        </div>
+      )}
+
       <section className="border-b border-border bg-gradient-to-b from-accent/5 to-transparent px-4 py-10">
         <div className="mx-auto max-w-6xl text-center">
           <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -324,11 +351,23 @@ export default function Shop() {
           </div>
         )}
 
-        <label className="mb-8 flex cursor-pointer gap-3 rounded-xl border border-border bg-surface-elevated p-4">
+        <label
+          ref={agbConsentRef}
+          className={[
+            'mb-8 flex cursor-pointer gap-3 rounded-xl border bg-surface-elevated p-4 transition-colors',
+            agbHighlight ? 'agb-consent-pulse border-red-500' : 'border-border',
+          ].join(' ')}
+        >
           <input
             type="checkbox"
             checked={legalConsentAccepted}
-            onChange={(event) => setLegalConsentAccepted(event.target.checked)}
+            onChange={(event) => {
+              setLegalConsentAccepted(event.target.checked)
+              if (event.target.checked) {
+                setAgbHighlight(false)
+                setAgbToastVisible(false)
+              }
+            }}
             className="mt-1 h-4 w-4 shrink-0 rounded border-border accent-accent"
           />
           <span className="text-sm leading-relaxed text-muted">
@@ -351,7 +390,6 @@ export default function Shop() {
               key={product.packageId}
               product={product}
               loading={loadingId === product.packageId}
-              purchaseAllowed={legalConsentAccepted}
               onBuy={() => void handleCheckout(product.packageId)}
             />
           ))}
@@ -463,9 +501,8 @@ export default function Shop() {
               {compatResult.ok && compatResult.product && (
                 <button
                   type="button"
-                  disabled={!legalConsentAccepted}
                   onClick={() => void handleCheckout(compatResult.product!.packageId)}
-                  className="mt-3 block text-xs font-semibold underline disabled:cursor-not-allowed disabled:opacity-50"
+                  className="mt-3 block text-xs font-semibold underline"
                 >
                   Direkt zum passenden Paket →
                 </button>

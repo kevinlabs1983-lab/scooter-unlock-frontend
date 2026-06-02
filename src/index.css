@@ -44,6 +44,22 @@
   .animate-terminal-line {
     animation: terminal-line 0.25s ease-out forwards;
   }
+
+  .agb-consent-pulse {
+    animation: agb-consent-pulse 0.65s ease-in-out 3;
+  }
+}
+
+@keyframes agb-consent-pulse {
+  0%,
+  100% {
+    border-color: rgb(239 68 68 / 0.55);
+    box-shadow: 0 0 0 0 rgb(249 115 22 / 0.35);
+  }
+  50% {
+    border-color: rgb(249 115 22 / 0.95);
+    box-shadow: 0 0 0 4px rgb(249 115 22 / 0.25);
+  }
 }
 
 @keyframes fade-in {
