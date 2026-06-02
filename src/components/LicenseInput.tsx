@@ -12,10 +12,15 @@ import {
 
 interface LicenseInputProps {
   resetToken?: number
+  initialLicenseKey?: string
   onActivatedChange?: (result: LicenseActivationResult) => void
 }
 
-export function LicenseInput({ resetToken = 0, onActivatedChange }: LicenseInputProps) {
+export function LicenseInput({
+  resetToken = 0,
+  initialLicenseKey = '',
+  onActivatedChange,
+}: LicenseInputProps) {
   const [license, setLicense] = useState('')
   const [activated, setActivated] = useState(false)
   const [touched, setTouched] = useState(false)
@@ -30,6 +35,16 @@ export function LicenseInput({ resetToken = 0, onActivatedChange }: LicenseInput
     setTouched(false)
     onActivatedChange?.({ activated: false, licenseKey: '', isMock: false })
   }, [resetToken, onActivatedChange])
+
+  useEffect(() => {
+    const trimmed = initialLicenseKey.trim()
+    if (!trimmed) {
+      return
+    }
+
+    setLicense(formatLicenseInput(trimmed))
+    setTouched(true)
+  }, [initialLicenseKey])
 
   const handleChange = (value: string) => {
     setTouched(true)

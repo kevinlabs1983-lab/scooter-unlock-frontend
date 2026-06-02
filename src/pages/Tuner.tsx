@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   CheckCircle2,
   ChevronRight,
@@ -35,6 +36,9 @@ const STEPS: { id: WizardStep; label: string }[] = [
 ]
 
 export default function Tuner() {
+  const [searchParams] = useSearchParams()
+  const urlLicenseKey = useMemo(() => searchParams.get('key')?.trim() ?? '', [searchParams])
+
   const { status, disconnect, clearLogs } = useBluetooth()
   const { startFlash, flashStatus } = useFlash()
 
@@ -266,6 +270,7 @@ export default function Tuner() {
 
             <LicenseInput
               resetToken={resetToken}
+              initialLicenseKey={urlLicenseKey}
               onActivatedChange={handleLicenseChange}
             />
 
