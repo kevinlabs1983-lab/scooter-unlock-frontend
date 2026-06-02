@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useOfferCountdown } from '../hooks/useOfferCountdown.ts'
 import { createCheckoutSession, type PackageId } from '../lib/checkout.ts'
+import { getDailySoldKeysCount } from '../lib/daily-sold-keys.ts'
 
 interface ProductCardData {
   packageId: PackageId
@@ -194,6 +195,7 @@ function ProductCard({
 
 export default function Shop() {
   const countdown = useOfferCountdown()
+  const dailySoldKeys = useMemo(() => getDailySoldKeysCount(), [])
   const [loadingId, setLoadingId] = useState<PackageId | null>(null)
   const [checkoutError, setCheckoutError] = useState<string | null>(null)
 
@@ -310,7 +312,7 @@ export default function Shop() {
           </div>
 
           <p className="mt-6 text-sm font-medium text-foreground/90">
-            🔥 127 Keys heute verkauft
+            🔥 {dailySoldKeys} Keys heute verkauft
           </p>
         </div>
       </section>
