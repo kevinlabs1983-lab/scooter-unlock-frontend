@@ -1,7 +1,15 @@
-import { Link, NavLink, Outlet } from 'react-router-dom'
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { Footer } from './components/Footer.tsx'
+import { IosSafariBanner } from './components/IosSafariBanner.tsx'
+
+function shouldShowIosBanner(pathname: string): boolean {
+  return pathname === '/' || pathname === '/shop' || pathname === '/tuner'
+}
 
 function App() {
+  const { pathname } = useLocation()
+  const showIosBanner = shouldShowIosBanner(pathname)
+
   return (
     <div className="flex min-h-svh flex-col bg-background">
       <header className="border-b border-border bg-surface/80 backdrop-blur-sm">
@@ -31,6 +39,8 @@ function App() {
           </nav>
         </div>
       </header>
+
+      {showIosBanner && <IosSafariBanner />}
 
       <div className="flex flex-1 flex-col">
         <Outlet />
