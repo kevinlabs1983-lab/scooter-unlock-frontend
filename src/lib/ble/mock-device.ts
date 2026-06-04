@@ -5,7 +5,8 @@ import {
   NINEBOT_TX_CHAR_UUID,
 } from './constants.ts'
 import { buildFrame, parseFrame } from './framing.ts'
-import type { ScooterConnection } from './transport.ts'
+import { performHandshake } from '../crypto/handshake.ts'
+import type { ConnectedScooter } from './transport.ts'
 import {
   decryptBootstrapFrame,
   deriveKeyMaterial,
@@ -449,7 +450,7 @@ export class MockBluetoothDevice {
   }
 }
 
-export async function connectToMockScooter(): Promise<ScooterConnection> {
+export async function connectToMockScooter(): Promise<ConnectedScooter> {
   await new Promise((resolve) => window.setTimeout(resolve, 250))
 
   const device = new MockBluetoothDevice()
@@ -460,9 +461,16 @@ export async function connectToMockScooter(): Promise<ScooterConnection> {
 
   await rxChar.startNotifications()
 
+  const tx = txChar as unknown as BluetoothRemoteGATTCharacteristic
+  const rx = rxChar as unknown as BluetoothRemoteGATTCharacteristic
+  const session = await performHandshake(tx, rx, MOCK_DEVICE_NAME)
+
   return {
-    device: device as unknown as BluetoothDevice,
-    txChar: txChar as unknown as BluetoothRemoteGATTCharacteristic,
-    rxChar: rxChar as unknown as BluetoothRemoteGATTCharacteristic,
+    connection: {
+      device: device as unknown as BluetoothDevice,
+      txChar: tx,
+      rxChar: rx,
+    },
+    session,
   }
 }

@@ -1,6 +1,6 @@
 import { ADDR } from '../ble/constants.ts'
+import { sendAndWaitForEncryptedFrame } from '../ble/receive.ts'
 import { buildFrame, parseFrame } from '../ble/framing.ts'
-import { sendFrame } from '../ble/transport.ts'
 import {
   decryptBootstrapFrame,
   deriveAuthToken,
@@ -34,52 +34,8 @@ function randomBytes(length: number): Uint8Array {
   return bytes
 }
 
-function waitForEncryptedFrame(
-  rx: BluetoothRemoteGATTCharacteristic,
-  timeoutMs: number,
-): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    let settled = false
-
-    const cleanup = () => {
-      window.clearTimeout(timer)
-      rx.removeEventListener('characteristicvaluechanged', onChange)
-    }
-
-    const timer = window.setTimeout(() => {
-      if (settled) {
-        return
-      }
-      settled = true
-      cleanup()
-      reject(new Error('Handshake-Timeout'))
-    }, timeoutMs)
-
-    const onChange = (event: Event) => {
-      const target = event.target as BluetoothRemoteGATTCharacteristic
-      if (!target.value || settled) {
-        return
-      }
-
-      settled = true
-      const { buffer, byteOffset, byteLength } = target.value
-      cleanup()
-      resolve(new Uint8Array(buffer, byteOffset, byteLength))
-    }
-
-    rx.addEventListener('characteristicvaluechanged', onChange)
-  })
-}
-
 function isAccepted(data: Uint8Array): boolean {
   return data.length === 1 && data[0] === HANDSHAKE_ACCEPTED
-}
-
-async function sendEncrypted(
-  tx: BluetoothRemoteGATTCharacteristic,
-  wire: Uint8Array,
-): Promise<void> {
-  await sendFrame(tx, wire)
 }
 
 /**
@@ -96,7 +52,6 @@ export async function performHandshake(
 ): Promise<SessionState> {
   let counter = 0
 
-  // ── Phase 1: PRE_COMM ────────────────────────────────────────────────
   const bootstrapKey = await deriveSessionKey(deviceName, FW_DATA)
   const challenge = randomBytes(16)
   const preCommFrame = buildFrame(ADDR.BLE, ADDR.APP, CMD_PRE_COMM, challenge)
@@ -106,8 +61,13 @@ export async function performHandshake(
     FW_DATA,
   )
 
-  await sendEncrypted(tx, preCommWire)
-  const preCommResponseWire = await waitForEncryptedFrame(rx, 5000)
+  const preCommResponseWire = await sendAndWaitForEncryptedFrame(
+    tx,
+    rx,
+    preCommWire,
+    5000,
+    { minLength: 41, debounceMs: 40 },
+  )
   const preCommPlain = await decryptBootstrapFrame(
     bootstrapKey,
     preCommResponseWire,
@@ -130,7 +90,6 @@ export async function performHandshake(
   counter = 1
   const phaseKey = await deriveSessionKey(deviceName, authParam)
 
-  // ── Phase 2: SET_PWD ─────────────────────────────────────────────────
   const sessionPassword = await generateSessionPassword(authParam)
   const setPwdFrame = buildFrame(
     ADDR.BLE,
@@ -146,8 +105,13 @@ export async function performHandshake(
   )
   counter = afterSetPwd
 
-  await sendEncrypted(tx, setPwdWire)
-  const setPwdResponseWire = await waitForEncryptedFrame(rx, 10000)
+  const setPwdResponseWire = await sendAndWaitForEncryptedFrame(
+    tx,
+    rx,
+    setPwdWire,
+    10000,
+    { minLength: 12, debounceMs: 40 },
+  )
   const { plaintext: setPwdPlain, recvCounter: afterSetPwdRx } =
     await unwrapEncryptedFrame(phaseKey, counter, setPwdResponseWire, authParam)
   counter = afterSetPwdRx
@@ -160,7 +124,6 @@ export async function performHandshake(
     throw new Error('SET_PWD abgelehnt')
   }
 
-  // ── Phase 3: AUTH ────────────────────────────────────────────────────
   const sessionKey = await deriveKeyMaterial(sessionPassword, authParam)
   const authToken = await deriveAuthToken(sessionPassword, authParam)
   const authFrame = buildFrame(ADDR.BLE, ADDR.APP, CMD_AUTH, authToken)
@@ -172,8 +135,13 @@ export async function performHandshake(
   )
   counter = afterAuth
 
-  await sendEncrypted(tx, authWire)
-  const authResponseWire = await waitForEncryptedFrame(rx, 5000)
+  const authResponseWire = await sendAndWaitForEncryptedFrame(
+    tx,
+    rx,
+    authWire,
+    5000,
+    { minLength: 12, debounceMs: 40 },
+  )
   const { plaintext: authPlain, recvCounter: finalCounter } =
     await unwrapEncryptedFrame(sessionKey, counter, authResponseWire, authParam)
 

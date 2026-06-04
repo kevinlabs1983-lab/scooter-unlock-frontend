@@ -1,6 +1,6 @@
 import { ADDR } from '../ble/constants.ts'
 import { buildFrame, parseFrame } from '../ble/framing.ts'
-import { sendFrame } from '../ble/transport.ts'
+import { sendAndWaitForEncryptedFrame } from '../ble/receive.ts'
 import { unwrapEncryptedFrame, wrapEncryptedFrame } from '../crypto/aes.ts'
 import type { SessionState } from '../crypto/handshake.ts'
 
@@ -32,43 +32,6 @@ export interface DeviceInfo {
   firmwareBms: string
 }
 
-function waitForEncryptedFrame(
-  rx: BluetoothRemoteGATTCharacteristic,
-  timeoutMs: number,
-): Promise<Uint8Array> {
-  return new Promise((resolve, reject) => {
-    let settled = false
-
-    const cleanup = () => {
-      window.clearTimeout(timer)
-      rx.removeEventListener('characteristicvaluechanged', onChange)
-    }
-
-    const timer = window.setTimeout(() => {
-      if (settled) {
-        return
-      }
-      settled = true
-      cleanup()
-      reject(new Error('Kommando-Timeout'))
-    }, timeoutMs)
-
-    const onChange = (event: Event) => {
-      const target = event.target as BluetoothRemoteGATTCharacteristic
-      if (!target.value || settled) {
-        return
-      }
-
-      settled = true
-      const { buffer, byteOffset, byteLength } = target.value
-      cleanup()
-      resolve(new Uint8Array(buffer, byteOffset, byteLength))
-    }
-
-    rx.addEventListener('characteristicvaluechanged', onChange)
-  })
-}
-
 export async function exchangeFrame(
   session: SessionState,
   plaintext: Uint8Array,
@@ -81,8 +44,13 @@ export async function exchangeFrame(
     session.authParam,
   )
 
-  await sendFrame(session.tx, wire)
-  const responseWire = await waitForEncryptedFrame(session.rx, timeoutMs)
+  const responseWire = await sendAndWaitForEncryptedFrame(
+    session.tx,
+    session.rx,
+    wire,
+    timeoutMs,
+    { minLength: 12, debounceMs: 40 },
+  )
   const { plaintext: responsePlain, recvCounter } = await unwrapEncryptedFrame(
     session.key,
     nextCounter,

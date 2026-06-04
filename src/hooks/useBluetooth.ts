@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { USE_MOCK } from '../lib/ble/constants.ts'
 import { connectToMockScooter } from '../lib/ble/mock-device.ts'
 import { connectToScooter } from '../lib/ble/transport.ts'
-import { performHandshake } from '../lib/crypto/handshake.ts'
+import type { SessionState } from '../lib/crypto/handshake.ts'
 import { getDeviceInfo } from '../lib/protocol/commands.ts'
 import {
   useBluetoothStore,
@@ -19,6 +19,7 @@ export function useBluetooth() {
   const logs = useBluetoothStore((state) => state.logs)
 
   const disconnectListenerRef = useRef<((event: Event) => void) | null>(null)
+  const deviceInfoLoadRef = useRef(0)
 
   const removeDisconnectListener = useCallback((device: BluetoothDevice | null) => {
     if (!device || !disconnectListenerRef.current) {
@@ -34,6 +35,7 @@ export function useBluetooth() {
       return
     }
 
+    deviceInfoLoadRef.current += 1
     removeDisconnectListener(store.device)
     store.resetConnection()
     store.setStatus('disconnected')
@@ -41,11 +43,11 @@ export function useBluetooth() {
   }, [removeDisconnectListener])
 
   const attachDisconnectListener = useCallback(
-    (device: BluetoothDevice) => {
-      removeDisconnectListener(device)
+    (bleDevice: BluetoothDevice) => {
+      removeDisconnectListener(bleDevice)
       const handler = () => handleGattDisconnected()
       disconnectListenerRef.current = handler
-      device.addEventListener('gattserverdisconnected', handler)
+      bleDevice.addEventListener('gattserverdisconnected', handler)
     },
     [handleGattDisconnected, removeDisconnectListener],
   )
@@ -72,69 +74,21 @@ export function useBluetooth() {
 
     try {
       if (USE_MOCK) {
-        console.log('[BT] connectToMockScooter...')
-        const connection = await connectToMockScooter()
+        const { connection, session: sessionState } = await connectToMockScooter()
         connectedDevice = connection.device
         store.setDevice(connection.device)
-        store.addLog('info', `Gerät gefunden: ${connection.device.name ?? 'Unbekannt'}`)
-
-        store.setStatus('handshake')
-        store.addLog('info', 'Verschlüsselter Handshake wird durchgeführt…')
-
-        const deviceName = connection.device.name ?? 'Ninebot'
-        console.log('[BT] performHandshake...')
-        const sessionState = await performHandshake(
-          connection.txChar,
-          connection.rxChar,
-          deviceName,
-        )
         store.setSession(sessionState)
-        store.addLog('success', `Handshake abgeschlossen (SN: ${sessionState.serial})`)
-
         store.setStatus('connected')
-        store.addLog('info', 'Geräteinformationen werden gelesen…')
-
-        console.log('[BT] getDeviceInfo...')
-        const info = await getDeviceInfo(sessionState)
-        store.setDeviceInfo(info)
-        store.addLog(
-          'success',
-          `Verbunden — DRV ${info.firmwareDrv}, BLE ${info.firmwareBle}, BMS ${info.firmwareBms}`,
-        )
+        store.addLog('success', `Handshake abgeschlossen (SN: ${sessionState.serial})`)
         attachDisconnectListener(connection.device)
-        console.log('[BT] DONE', info)
       } else {
-        console.log('[BT] connectToScooter...')
-        const connection = await connectToScooter()
+        const { connection, session: sessionState } = await connectToScooter()
         connectedDevice = connection.device
         store.setDevice(connection.device)
-        store.addLog('info', `Gerät gefunden: ${connection.device.name ?? 'Unbekannt'}`)
-
-        store.setStatus('handshake')
-        store.addLog('info', 'Verschlüsselter Handshake wird durchgeführt…')
-
-        const deviceName = connection.device.name ?? 'Ninebot'
-        console.log('[BT] performHandshake...')
-        const sessionState = await performHandshake(
-          connection.txChar,
-          connection.rxChar,
-          deviceName,
-        )
         store.setSession(sessionState)
-        store.addLog('success', `Handshake abgeschlossen (SN: ${sessionState.serial})`)
-
         store.setStatus('connected')
-        store.addLog('info', 'Geräteinformationen werden gelesen…')
-
-        console.log('[BT] getDeviceInfo...')
-        const info = await getDeviceInfo(sessionState)
-        store.setDeviceInfo(info)
-        store.addLog(
-          'success',
-          `Verbunden — DRV ${info.firmwareDrv}, BLE ${info.firmwareBle}, BMS ${info.firmwareBms}`,
-        )
+        store.addLog('success', `Handshake abgeschlossen (SN: ${sessionState.serial})`)
         attachDisconnectListener(connection.device)
-        console.log('[BT] DONE', info)
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
@@ -148,17 +102,51 @@ export function useBluetooth() {
 
   const disconnect = useCallback(() => {
     const store = useBluetoothStore.getState()
+    deviceInfoLoadRef.current += 1
     removeDisconnectListener(store.device)
     connectionCleanup(store.device)
     store.resetConnection()
+    store.setDeviceInfo(null)
     store.setStatus('disconnected')
     store.addLog('info', 'Verbindung getrennt')
   }, [removeDisconnectListener])
 
+  useEffect(() => {
+    if (status !== 'connected' || !session || deviceInfo) {
+      return
+    }
+
+    const loadId = ++deviceInfoLoadRef.current
+    const activeSession: SessionState = session
+
+    const timeoutId = window.setTimeout(() => {
+      void getDeviceInfo(activeSession)
+        .then((info) => {
+          const current = useBluetoothStore.getState()
+          if (loadId !== deviceInfoLoadRef.current || current.status !== 'connected') {
+            return
+          }
+          current.setDeviceInfo(info)
+          current.addLog(
+            'success',
+            `Verbunden — DRV ${info.firmwareDrv}, BLE ${info.firmwareBle}, BMS ${info.firmwareBms}`,
+          )
+        })
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : String(err)
+          useBluetoothStore.getState().addLog('warn', `Geräteinfo: ${message}`)
+        })
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [status, session, deviceInfo])
+
   useEffect(
     () => () => {
-      const device = useBluetoothStore.getState().device
-      removeDisconnectListener(device)
+      const bleDevice = useBluetoothStore.getState().device
+      removeDisconnectListener(bleDevice)
     },
     [removeDisconnectListener],
   )

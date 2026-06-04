@@ -1,3 +1,4 @@
+import { performHandshake, type SessionState } from '../crypto/handshake.ts'
 import {
   NINEBOT_RX_CHAR_UUID,
   NINEBOT_SERVICE_UUID,
@@ -10,7 +11,14 @@ export interface ScooterConnection {
   rxChar: BluetoothRemoteGATTCharacteristic
 }
 
-export async function connectToScooter(): Promise<ScooterConnection> {
+export interface ConnectedScooter {
+  connection: ScooterConnection
+  session: SessionState
+}
+
+export async function connectToScooter(
+  deviceNameHint?: string,
+): Promise<ConnectedScooter> {
   const device = await navigator.bluetooth.requestDevice({
     filters: [{ services: [NINEBOT_SERVICE_UUID] }],
     optionalServices: [NINEBOT_SERVICE_UUID],
@@ -28,7 +36,13 @@ export async function connectToScooter(): Promise<ScooterConnection> {
 
   await rxChar.startNotifications()
 
-  return { device, txChar, rxChar }
+  const deviceName = deviceNameHint ?? device.name ?? 'Ninebot'
+  const session = await performHandshake(txChar, rxChar, deviceName)
+
+  return {
+    connection: { device, txChar, rxChar },
+    session,
+  }
 }
 
 export async function sendFrame(
