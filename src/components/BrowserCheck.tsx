@@ -51,7 +51,7 @@ export function BrowserCheck({ compact = false }: BrowserCheckProps) {
             </p>
             <p className="mt-1 text-xs text-muted">
               Web Bluetooth benötigt HTTPS und einen unterstützten Browser
-              (Chrome 56+, Edge 79+, Chrome Android).
+              (Chrome 56+, Edge 79+, Chrome Android oder Bluefy auf iOS).
             </p>
           </div>
 

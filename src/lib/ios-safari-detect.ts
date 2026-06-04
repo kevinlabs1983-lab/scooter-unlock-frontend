@@ -1,6 +1,10 @@
 const DISMISS_STORAGE_KEY = 'scooter-unlock-ios-bluefy-banner-dismissed'
 
 export function isIosOrSafari(userAgent = navigator.userAgent): boolean {
+  if (/Bluefy/i.test(userAgent)) {
+    return false
+  }
+
   const isIos = /iPhone|iPad|iPod/i.test(userAgent)
   const isSafari = /^((?!chrome|android).)*safari/i.test(userAgent)
   return isIos || isSafari

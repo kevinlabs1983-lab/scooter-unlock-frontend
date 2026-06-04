@@ -12,10 +12,18 @@ function parseVersion(userAgent: string, pattern: RegExp): number {
   return match?.[1] ? Number.parseInt(match[1], 10) : 0
 }
 
+export function isBluefyBrowser(userAgent = navigator.userAgent): boolean {
+  return /Bluefy/i.test(userAgent)
+}
+
 export function detectBrowser(userAgent = navigator.userAgent): {
   name: string
   supported: boolean
 } {
+  if (isBluefyBrowser(userAgent)) {
+    return { name: 'Bluefy', supported: true }
+  }
+
   const isOpera = /OPR\//.test(userAgent)
   const isEdge = /Edg\//.test(userAgent)
   const isSamsung = /SamsungBrowser\//.test(userAgent)
@@ -74,7 +82,7 @@ export function checkBrowserSupport(): BrowserCheckResult {
 
   if (!isSupportedBrowser) {
     issues.push(
-      `${browserName} wird nicht unterstützt. Bitte Chrome 56+, Edge 79+ oder Chrome für Android verwenden.`,
+      `${browserName} wird nicht unterstützt. Bitte Chrome 56+, Edge 79+, Chrome für Android oder Bluefy (iOS) verwenden.`,
     )
   }
 
