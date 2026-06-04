@@ -63,6 +63,15 @@ export default function Tuner() {
   }, [status, step])
 
   useEffect(() => {
+    if (
+      (status === 'disconnected' || status === 'error') &&
+      (step === 'device' || step === 'license')
+    ) {
+      setStep('connect')
+    }
+  }, [status, step])
+
+  useEffect(() => {
     if (flashStatus === 'done') {
       setShowSuccess(true)
     }
@@ -222,7 +231,7 @@ export default function Tuner() {
               </p>
             </div>
 
-            <ConnectButton />
+            <ConnectButton onContinue={() => setStep('device')} />
             <BrowserCheck />
           </section>
         )}
