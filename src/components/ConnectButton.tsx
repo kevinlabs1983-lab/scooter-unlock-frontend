@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Bluetooth, Check, ChevronRight } from 'lucide-react'
 import { isBrowserReady } from './BrowserCheck.tsx'
 import { useBluetooth } from '../hooks/useBluetooth.ts'
@@ -20,6 +21,12 @@ export function ConnectButton({ onContinue }: ConnectButtonProps) {
       void connect()
     }
   }
+
+  useEffect(() => {
+    if (isConnected) {
+      onContinue?.()
+    }
+  }, [isConnected, onContinue])
 
   if (isConnected) {
     return (

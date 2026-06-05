@@ -73,6 +73,7 @@ export function useBluetooth() {
     )
 
     try {
+      store.setStatus('handshake')
       if (USE_MOCK) {
         const { connection, session: sessionState } = await connectToMockScooter()
         connectedDevice = connection.device
@@ -91,12 +92,16 @@ export function useBluetooth() {
         attachDisconnectListener(connection.device)
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      store.setError(message)
-      store.setStatus('error')
-      store.addLog('error', message)
+      console.error('BLE handshake/connect failed', err)
+      const rawMessage = err instanceof Error ? err.message : String(err)
+      const message = isHandshakeFailure(rawMessage)
+        ? 'Verbindung fehlgeschlagen - bitte erneut versuchen'
+        : rawMessage
       connectionCleanup(connectedDevice)
       store.resetConnection()
+      store.setStatus('error')
+      store.setError(message)
+      store.addLog('error', message)
     }
   }, [attachDisconnectListener])
 
@@ -177,3 +182,13 @@ function connectionCleanup(device: BluetoothDevice | null) {
 }
 
 export type { BluetoothStatus, LogEntry }
+
+function isHandshakeFailure(message: string): boolean {
+  return (
+    message.includes('Handshake') ||
+    message.includes('PRE_COMM') ||
+    message.includes('SET_PWD') ||
+    message.includes('AUTH') ||
+    message.includes('Timeout')
+  )
+}

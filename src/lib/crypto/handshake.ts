@@ -61,6 +61,7 @@ export async function performHandshake(
     FW_DATA,
   )
 
+  console.log('BLE: PRE_COMM sent')
   const preCommResponseWire = await sendAndWaitForEncryptedFrame(
     tx,
     rx,
@@ -73,6 +74,7 @@ export async function performHandshake(
     preCommResponseWire,
     FW_DATA,
   )
+  console.log('BLE: PRE_COMM response received')
 
   const preCommParsed = parseFrame(preCommPlain)
   if (
@@ -105,6 +107,7 @@ export async function performHandshake(
   )
   counter = afterSetPwd
 
+  console.log('BLE: SET_PWD sent')
   const setPwdResponseWire = await sendAndWaitForEncryptedFrame(
     tx,
     rx,
@@ -115,6 +118,7 @@ export async function performHandshake(
   const { plaintext: setPwdPlain, recvCounter: afterSetPwdRx } =
     await unwrapEncryptedFrame(phaseKey, counter, setPwdResponseWire, authParam)
   counter = afterSetPwdRx
+  console.log('BLE: SET_PWD response received')
 
   const setPwdParsed = parseFrame(setPwdPlain)
   if (setPwdParsed === null || setPwdParsed.cmd !== CMD_SET_PWD) {
@@ -135,6 +139,7 @@ export async function performHandshake(
   )
   counter = afterAuth
 
+  console.log('BLE: AUTH sent')
   const authResponseWire = await sendAndWaitForEncryptedFrame(
     tx,
     rx,
@@ -144,6 +149,7 @@ export async function performHandshake(
   )
   const { plaintext: authPlain, recvCounter: finalCounter } =
     await unwrapEncryptedFrame(sessionKey, counter, authResponseWire, authParam)
+  console.log('BLE: AUTH response received - handshake complete')
 
   const authParsed = parseFrame(authPlain)
   if (authParsed === null || authParsed.cmd !== CMD_AUTH) {

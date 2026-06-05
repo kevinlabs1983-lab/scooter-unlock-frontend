@@ -455,11 +455,13 @@ export async function connectToMockScooter(): Promise<ConnectedScooter> {
 
   const device = new MockBluetoothDevice()
   const gatt = await device.gatt.connect()
+  console.log('BLE: GATT connected')
   const service = await gatt.getPrimaryService(NINEBOT_SERVICE_UUID)
   const txChar = await service.getCharacteristic(NINEBOT_TX_CHAR_UUID)
   const rxChar = await service.getCharacteristic(NINEBOT_RX_CHAR_UUID)
 
   await rxChar.startNotifications()
+  console.log('BLE: startNotifications done')
 
   const tx = txChar as unknown as BluetoothRemoteGATTCharacteristic
   const rx = rxChar as unknown as BluetoothRemoteGATTCharacteristic

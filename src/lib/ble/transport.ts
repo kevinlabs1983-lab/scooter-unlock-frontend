@@ -30,11 +30,13 @@ export async function connectToScooter(
   }
 
   const gatt = await server
+  console.log('BLE: GATT connected')
   const service = await gatt.getPrimaryService(NINEBOT_SERVICE_UUID)
   const txChar = await service.getCharacteristic(NINEBOT_TX_CHAR_UUID)
   const rxChar = await service.getCharacteristic(NINEBOT_RX_CHAR_UUID)
 
   await rxChar.startNotifications()
+  console.log('BLE: startNotifications done')
 
   const deviceName = deviceNameHint ?? device.name ?? 'Ninebot'
   const session = await performHandshake(txChar, rxChar, deviceName)
