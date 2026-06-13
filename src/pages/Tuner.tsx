@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   CheckCircle2,
@@ -25,6 +25,7 @@ import {
   type LicenseActivationResult,
 } from '../lib/license.ts'
 import { useFlashStore } from '../store/flashStore.ts'
+import { useBluetoothStore } from '../store/bluetoothStore.ts'
 
 type WizardStep = 'connect' | 'device' | 'license' | 'flash'
 
@@ -39,7 +40,7 @@ export default function Tuner() {
   const [searchParams] = useSearchParams()
   const urlLicenseKey = useMemo(() => searchParams.get('key')?.trim() ?? '', [searchParams])
 
-  const { status, disconnect, clearLogs } = useBluetooth()
+  const { disconnect, clearLogs } = useBluetooth()
   const { startFlash, flashStatus } = useFlash()
 
   const [step, setStep] = useState<WizardStep>('connect')
@@ -55,21 +56,33 @@ export default function Tuner() {
   const [flashTarget, setFlashTarget] = useState<LoadedFirmware['flashTarget']>('ESC')
   const [showSuccess, setShowSuccess] = useState(false)
   const [licensePatchConfig, setLicensePatchConfig] = useState<PatchConfig | null>(null)
+  const stepRef = useRef<WizardStep>('connect')
+  stepRef.current = step
+
+  const handleAdvanceToDevice = useCallback(() => {
+    setStep('device')
+  }, [])
 
   useEffect(() => {
-    if (status === 'connected' && step === 'connect') {
-      setStep('device')
-    }
-  }, [status, step])
+    const unsubscribe = useBluetoothStore.subscribe((state, prevState) => {
+      if (state.status === 'connected' && prevState.status !== 'connected') {
+        if (stepRef.current === 'connect') {
+          setStep('device')
+        }
+        return
+      }
 
-  useEffect(() => {
-    if (
-      (status === 'disconnected' || status === 'error') &&
-      (step === 'device' || step === 'license')
-    ) {
-      setStep('connect')
-    }
-  }, [status, step])
+      if (
+        (state.status === 'disconnected' || state.status === 'error') &&
+        state.status !== prevState.status &&
+        (stepRef.current === 'device' || stepRef.current === 'license')
+      ) {
+        setStep('connect')
+      }
+    })
+
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     if (flashStatus === 'done') {
@@ -231,7 +244,7 @@ export default function Tuner() {
               </p>
             </div>
 
-            <ConnectButton onContinue={() => setStep('device')} />
+            <ConnectButton onContinue={handleAdvanceToDevice} />
             <BrowserCheck />
           </section>
         )}
