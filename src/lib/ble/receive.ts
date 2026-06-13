@@ -39,8 +39,8 @@ export function isNinebotWireFrameComplete(buffer: Uint8Array): boolean {
   }
 
   if (magic0 === 0x5a && magic1 === 0xa5) {
-    // Bootstrap + SN: 3 Header + len Bytes Payload + 6 Tail
-    return len >= 4 && buffer.length >= len + 9
+    // Plain (bLen=Payload) oder SN-verschlüsselt: 3 Header + len Bytes + 6 Tail
+    return buffer.length >= len + 9
   }
 
   return false

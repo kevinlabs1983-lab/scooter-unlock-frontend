@@ -1,5 +1,5 @@
 import { ADDR, USE_MOCK } from '../ble/constants.ts'
-import { bleDebugError, bleDebugLog, bleDebugSuccess, bleDebugWarn } from '../ble/debug-log.ts'
+import { bleDebugError, bleDebugLog, bleDebugSuccess, bleDebugWarn, bytesToHex } from '../ble/debug-log.ts'
 import { isNinebotWireFrameComplete, sendAndWaitForEncryptedFrame } from '../ble/receive.ts'
 import {
   APP_ADDR,
@@ -9,13 +9,14 @@ import {
   type NinebotProtocol,
 } from '../ble/frame-utils.ts'
 import { buildFrame, parseFrame } from '../ble/framing.ts'
-import { buildEncryption2Frame, parseEncryption2Frame } from '../ble/framing-encryption2.ts'
 import {
-  APP_ADDR_E2_FALLBACK,
-  BOARD,
-  CMD_E2,
-  CMD_G30,
-} from '../ble/protocol-types.ts'
+  buildEncryption2PreCommRequest,
+  E2_ADDR_DASHBOARD,
+  isEncryption2PlainFrameComplete,
+  parseEncryption2Frame,
+  parseEncryption2PreCommResponse,
+} from '../ble/framing-encryption2.ts'
+import { CMD_E2, CMD_G30 } from '../ble/protocol-types.ts'
 import {
   decryptBootstrapFrame,
   deriveAuthToken,
@@ -113,53 +114,31 @@ async function exchangeG30PreComm(
 async function exchangeEncryption2PreComm(
   tx: BluetoothRemoteGATTCharacteristic,
   rx: BluetoothRemoteGATTCharacteristic,
-  deviceName: string,
-  ecbInput: Uint8Array,
-  appAddr: number,
-  label: string,
 ): Promise<PreCommResult> {
-  const bootstrapKey = await deriveSessionKey(deviceName, FW_DATA)
-  const preCommFrame = buildEncryption2Frame(
-    BOARD.BLE,
-    appAddr,
-    CMD_E2.PRE_COMM,
-    new Uint8Array(0),
-    0,
-  )
-  const preCommWire = await encryptBootstrapFrame(bootstrapKey, preCommFrame, ecbInput)
+  const preCommWire = buildEncryption2PreCommRequest()
 
-  bleDebugLog(
-    `PRE_COMM gesendet (${label}, Encryption2, App=0x${appAddr.toString(16).padStart(2, '0')})`,
-  )
+  bleDebugLog(`PRE_COMM TX (${preCommWire.length} B): ${bytesToHex(preCommWire)}`)
+
   const preCommResponseWire = await sendAndWaitForEncryptedFrame(
     tx,
     rx,
     preCommWire,
-    8000,
-    { isComplete: isNinebotWireFrameComplete },
+    5000,
+    { isComplete: isEncryption2PlainFrameComplete },
   )
-  const preCommPlain = await decryptBootstrapFrame(
-    bootstrapKey,
-    preCommResponseWire,
-    ecbInput,
-  )
-  bleDebugSuccess(`PRE_COMM Antwort (${label}, Encryption2) — SN wird geparst`)
 
-  const preCommParsed = parseEncryption2Frame(preCommPlain)
-  if (
-    preCommParsed === null ||
-    preCommParsed.cmd !== CMD_E2.PRE_COMM ||
-    preCommParsed.data.length < 30
-  ) {
+  bleDebugLog(`PRE_COMM RX (${preCommResponseWire.length} B): ${bytesToHex(preCommResponseWire)}`)
+
+  const parsed = parseEncryption2PreCommResponse(preCommResponseWire)
+  if (parsed === null) {
     throw new Error('Ungültige PRE_COMM-Antwort (Encryption2)')
   }
 
-  return {
-    authParam: preCommParsed.data.slice(0, 16),
-    serial: new TextDecoder()
-      .decode(preCommParsed.data.slice(16, 30))
-      .replace(/\0/g, ''),
-  }
+  bleDebugSuccess(
+    `PRE_COMM Antwort (Encryption2) — Key+SN OK (SN: ${parsed.serial || '?'})`,
+  )
+
+  return parsed
 }
 
 async function performG30Handshake(
@@ -266,40 +245,9 @@ async function performEncryption2Handshake(
   deviceName: string,
 ): Promise<SessionState> {
   let counter = 0
-  let preComm: PreCommResult | undefined
-  let appAddr: number = APP_ADDR[PROTOCOL_ENCRYPTION2]
+  const appAddr = E2_ADDR_DASHBOARD
 
-  const preCommAttempts: Array<{ app: number; ecb: Uint8Array; label: string }> = [
-    { app: APP_ADDR[PROTOCOL_ENCRYPTION2], ecb: FW_DATA, label: 'app=0x21 fw' },
-    { app: APP_ADDR_E2_FALLBACK, ecb: FW_DATA, label: 'app=0x04 fw' },
-    { app: APP_ADDR[PROTOCOL_ENCRYPTION2], ecb: NULL_CHALLENGE, label: 'app=0x21 zero' },
-    { app: APP_ADDR_E2_FALLBACK, ecb: NULL_CHALLENGE, label: 'app=0x04 zero' },
-  ]
-
-  let lastError: unknown = new Error('PRE_COMM Encryption2 — keine Versuche')
-  for (const attempt of preCommAttempts) {
-    try {
-      preComm = await exchangeEncryption2PreComm(
-        tx,
-        rx,
-        deviceName,
-        attempt.ecb,
-        attempt.app,
-        attempt.label,
-      )
-      appAddr = attempt.app
-      break
-    } catch (error) {
-      lastError = error
-      bleDebugWarn(`PRE_COMM ${attempt.label} fehlgeschlagen`)
-      bleDebugError(`PRE_COMM ${attempt.label}`, error)
-    }
-  }
-
-  if (!preComm) {
-    throw lastError instanceof Error ? lastError : new Error(String(lastError))
-  }
-
+  const preComm = await exchangeEncryption2PreComm(tx, rx)
   const { authParam, serial } = preComm
 
   counter = 1

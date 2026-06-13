@@ -19,3 +19,8 @@ export function bleDebugError(context: string, error: unknown): void {
   bleDebugLog(`${context}: ${detail}`, 'error')
   console.error(`[BLE] ${context}`, error)
 }
+
+/** Hex-Dump für BLE-Frames (z. B. PRE_COMM TX/RX). */
+export function bytesToHex(data: Uint8Array): string {
+  return Array.from(data, (b) => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
+}
