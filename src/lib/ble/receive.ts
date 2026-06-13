@@ -1,11 +1,9 @@
 import { sendFrame } from './transport.ts'
 
 export interface WaitFrameOptions {
-  /** Mindest-Puffergröße vor Abschluss (nach Debounce) */
-  minLength?: number
   /** Wartezeit nach letztem Fragment (Bluefy) */
   debounceMs?: number
-  /** Zusätzliche Vollständigkeitsprüfung auf akkumuliertem Wire-Buffer */
+  /** Vollständigkeitsprüfung auf akkumuliertem Wire-Buffer */
   isComplete?: (buffer: Uint8Array) => boolean
 }
 
@@ -25,6 +23,20 @@ function appendBuffer(existing: Uint8Array, chunk: Uint8Array): Uint8Array {
   return merged
 }
 
+/** Prüft ob ein Ninebot Wire-Frame (0x55 0xAA) vollständig empfangen wurde. */
+export function isNinebotWireFrameComplete(buffer: Uint8Array): boolean {
+  if (buffer.length < 11 || buffer[0] !== 0x55 || buffer[1] !== 0xaa) {
+    return false
+  }
+
+  const len = buffer[2] ?? 0
+  if (len < 3) {
+    return false
+  }
+
+  return buffer.length >= len + 11
+}
+
 /**
  * Registriert den Notify-Listener und akkumuliert Fragmente (Bluefy).
  * Promise vor dem Senden starten, dann sendFrame, dann await.
@@ -34,7 +46,7 @@ export function startWaitingForEncryptedFrame(
   timeoutMs: number,
   options: WaitFrameOptions = {},
 ): Promise<Uint8Array> {
-  const { minLength = 1, debounceMs = 40, isComplete } = options
+  const { debounceMs = 80, isComplete = isNinebotWireFrameComplete } = options
 
   return new Promise((resolve, reject) => {
     let settled = false
@@ -51,10 +63,7 @@ export function startWaitingForEncryptedFrame(
     }
 
     const tryResolve = () => {
-      if (settled || buffer.length < minLength) {
-        return
-      }
-      if (isComplete && !isComplete(buffer)) {
+      if (settled || !isComplete(buffer)) {
         return
       }
       settled = true

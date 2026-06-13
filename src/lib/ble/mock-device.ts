@@ -21,6 +21,7 @@ import {
   CMD_SET_PWD,
   FW_DATA,
   HANDSHAKE_ACCEPTED,
+  NULL_CHALLENGE,
 } from '../crypto/constants.ts'
 import {
   BLE_FIRMWARE_VERSION,
@@ -187,7 +188,7 @@ class MockScooterProtocol {
   }
 
   private async handlePreComm(wire: Uint8Array): Promise<void> {
-    const bootstrapKey = await deriveSessionKey(this.deviceName, FW_DATA)
+    const bootstrapKey = await deriveSessionKey(this.deviceName, NULL_CHALLENGE)
     const plaintext = await decryptBootstrapFrame(bootstrapKey, wire, FW_DATA)
     const parsed = parseFrame(plaintext)
 
@@ -472,6 +473,7 @@ export async function connectToMockScooter(): Promise<ConnectedScooter> {
       device: device as unknown as BluetoothDevice,
       txChar: tx,
       rxChar: rx,
+      bleProfileId: 'mock',
     },
     session,
   }

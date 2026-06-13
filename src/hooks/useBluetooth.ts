@@ -107,6 +107,9 @@ export function useBluetooth() {
       store.setStatus('error')
       store.setError(message)
       store.addLog('error', message)
+      if (message !== rawMessage) {
+        store.addLog('warn', `Technische Details: ${rawMessage}`)
+      }
     }
   }, [handleGattDisconnected])
 
@@ -186,6 +189,11 @@ function isHandshakeFailure(message: string): boolean {
     message.includes('PRE_COMM') ||
     message.includes('SET_PWD') ||
     message.includes('AUTH') ||
-    message.includes('Timeout')
+    message.includes('Bootstrap') ||
+    message.includes('MAC-Verifikation') ||
+    message.includes('Timeout') ||
+    message.includes('Ninebot BLE') ||
+    message.includes('Notify') ||
+    message.includes('Gerätename')
   )
 }

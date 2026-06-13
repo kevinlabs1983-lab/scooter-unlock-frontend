@@ -4,6 +4,9 @@ export const FW_DATA = new Uint8Array([
   0x34, 0x78, 0x0a, 0x5d,
 ])
 
+/** PRE_COMM Key2 = null (16 Null-Bytes) laut Ninebot Encryption2. */
+export const NULL_CHALLENGE = new Uint8Array(16)
+
 export const CMD_PRE_COMM = 0x65
 export const CMD_SET_PWD = 0x64
 export const CMD_AUTH = 0x67

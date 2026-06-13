@@ -1,7 +1,47 @@
-// Ninebot UART Service (alle modernen Modelle)
-export const NINEBOT_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
-export const NINEBOT_TX_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e' // App → Scooter
-export const NINEBOT_RX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e' // Scooter → App
+// Nordic UART (ältere Ninebot / Xiaomi Firmware)
+export const NORDIC_UART_SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
+export const NORDIC_UART_TX_CHAR_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'
+export const NORDIC_UART_RX_CHAR_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'
+
+// Ninebot Custom (neuere Hardware, Notify oft auf 0004 statt 0003)
+export const NINEBOT_CUSTOM_SERVICE_UUID = '6e400001-0000-0000-006e-696e65626f74'
+export const NINEBOT_CUSTOM_TX_CHAR_UUID = '6e400002-0000-0000-006e-696e65626f74'
+export const NINEBOT_CUSTOM_RX_CHAR_UUID = '6e400004-0000-0000-006e-696e65626f74'
+export const NINEBOT_CUSTOM_RX_FALLBACK_CHAR_UUID =
+  '6e400003-0000-0000-006e-696e65626f74'
+
+/** @deprecated Alias für Nordic UART — bitte NINEBOT_BLE_PROFILES nutzen */
+export const NINEBOT_SERVICE_UUID = NORDIC_UART_SERVICE_UUID
+/** @deprecated */
+export const NINEBOT_TX_CHAR_UUID = NORDIC_UART_TX_CHAR_UUID
+/** @deprecated */
+export const NINEBOT_RX_CHAR_UUID = NORDIC_UART_RX_CHAR_UUID
+
+export interface NinebotBleProfile {
+  id: string
+  serviceUuid: string
+  txCharUuid: string
+  rxCharUuids: string[]
+}
+
+export const NINEBOT_BLE_PROFILES: NinebotBleProfile[] = [
+  {
+    id: 'nordic-uart',
+    serviceUuid: NORDIC_UART_SERVICE_UUID,
+    txCharUuid: NORDIC_UART_TX_CHAR_UUID,
+    rxCharUuids: [NORDIC_UART_RX_CHAR_UUID],
+  },
+  {
+    id: 'ninebot-custom',
+    serviceUuid: NINEBOT_CUSTOM_SERVICE_UUID,
+    txCharUuid: NINEBOT_CUSTOM_TX_CHAR_UUID,
+    rxCharUuids: [NINEBOT_CUSTOM_RX_CHAR_UUID, NINEBOT_CUSTOM_RX_FALLBACK_CHAR_UUID],
+  },
+]
+
+export const NINEBOT_BLE_SERVICE_UUIDS = NINEBOT_BLE_PROFILES.map(
+  (profile) => profile.serviceUuid,
+)
 
 // Adressierung der Boards
 export const ADDR = {

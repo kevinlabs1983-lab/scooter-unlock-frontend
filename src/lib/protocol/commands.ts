@@ -1,6 +1,6 @@
 import { ADDR } from '../ble/constants.ts'
 import { buildFrame, parseFrame } from '../ble/framing.ts'
-import { sendAndWaitForEncryptedFrame } from '../ble/receive.ts'
+import { sendAndWaitForEncryptedFrame, isNinebotWireFrameComplete } from '../ble/receive.ts'
 import { unwrapEncryptedFrame, wrapEncryptedFrame } from '../crypto/aes.ts'
 import type { SessionState } from '../crypto/handshake.ts'
 
@@ -49,7 +49,7 @@ export async function exchangeFrame(
     session.rx,
     wire,
     timeoutMs,
-    { minLength: 12, debounceMs: 40 },
+    { isComplete: isNinebotWireFrameComplete },
   )
   const { plaintext: responsePlain, recvCounter } = await unwrapEncryptedFrame(
     session.key,
