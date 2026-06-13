@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { USE_MOCK } from '../lib/ble/constants.ts'
 import { connectToMockScooter } from '../lib/ble/mock-device.ts'
 import { connectToScooter } from '../lib/ble/transport.ts'
+import { bleDebugError, bleDebugLog, bleDebugSuccess } from '../lib/ble/debug-log.ts'
 import type { SessionState } from '../lib/crypto/handshake.ts'
 import { getDeviceInfo } from '../lib/protocol/commands.ts'
 import {
@@ -70,22 +71,21 @@ export function useBluetooth() {
 
     let connectedDevice: BluetoothDevice | null = null
 
+    store.clearLogs()
     store.setError(null)
     store.setStatus('connecting')
-    store.addLog(
-      'info',
-      USE_MOCK ? 'Mock-Scooter wird verbunden…' : 'BLE-Gerät wird gesucht…',
-    )
+    bleDebugLog('Verbindung gestartet…')
 
     try {
       store.setStatus('handshake')
       if (USE_MOCK) {
+        bleDebugLog('Mock-Modus aktiv')
         const { connection, session: sessionState } = await connectToMockScooter()
         connectedDevice = connection.device
         store.setDevice(connection.device)
         store.setSession(sessionState)
         store.setStatus('connected')
-        store.addLog('success', `Handshake abgeschlossen (SN: ${sessionState.serial})`)
+        bleDebugSuccess(`Verbunden (Mock) — SN: ${sessionState.serial}`)
         attachDisconnectListener(connection.device, handleGattDisconnected)
       } else {
         const { connection, session: sessionState } = await connectToScooter()
@@ -93,11 +93,13 @@ export function useBluetooth() {
         store.setDevice(connection.device)
         store.setSession(sessionState)
         store.setStatus('connected')
-        store.addLog('success', `Handshake abgeschlossen (SN: ${sessionState.serial})`)
+        bleDebugSuccess(
+          `Verbunden — Protokoll: ${sessionState.protocol}, Profil: ${connection.bleProfileId}`,
+        )
         attachDisconnectListener(connection.device, handleGattDisconnected)
       }
     } catch (err) {
-      console.error('BLE handshake/connect failed', err)
+      bleDebugError('Verbindung fehlgeschlagen', err)
       const rawMessage = err instanceof Error ? err.message : String(err)
       const message = isHandshakeFailure(rawMessage)
         ? 'Verbindung fehlgeschlagen - bitte erneut versuchen'
@@ -106,9 +108,9 @@ export function useBluetooth() {
       store.resetConnection()
       store.setStatus('error')
       store.setError(message)
-      store.addLog('error', message)
+      store.addLog('error', `[BLE] FEHLER: ${message}`)
       if (message !== rawMessage) {
-        store.addLog('warn', `Technische Details: ${rawMessage}`)
+        store.addLog('error', `[BLE] Detail: ${rawMessage}`)
       }
     }
   }, [handleGattDisconnected])

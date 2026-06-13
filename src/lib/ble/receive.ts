@@ -1,4 +1,5 @@
 import { sendFrame } from './transport.ts'
+import { bleDebugWarn } from './debug-log.ts'
 
 export interface WaitFrameOptions {
   /** Wartezeit nach letztem Fragment (Bluefy) */
@@ -99,6 +100,12 @@ export function startWaitingForEncryptedFrame(
       }
       settled = true
       cleanup()
+      bleDebugWarn(
+        `Timeout nach ${timeoutMs}ms — empfangen: ${buffer.length} Bytes` +
+          (buffer.length >= 2
+            ? ` (Magic: 0x${buffer[0]!.toString(16)} 0x${buffer[1]!.toString(16)})`
+            : ''),
+      )
       reject(new Error('Handshake-Timeout'))
     }, timeoutMs)
 

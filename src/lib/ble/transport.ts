@@ -4,6 +4,7 @@ import {
   NINEBOT_BLE_SERVICE_UUIDS,
   type NinebotBleProfile,
 } from './constants.ts'
+import { bleDebugError, bleDebugLog, bleDebugSuccess, bleDebugWarn } from './debug-log.ts'
 
 export interface ScooterConnection {
   device: BluetoothDevice
@@ -26,10 +27,11 @@ async function resolveNotifyCharacteristic(
   for (const uuid of rxCharUuids) {
     try {
       const characteristic = await service.getCharacteristic(uuid)
-      console.log('BLE: notify characteristic', uuid)
+      bleDebugSuccess(`Notify-Characteristic gefunden: ${uuid}`)
       return characteristic
     } catch (error) {
       lastError = error
+      bleDebugWarn(`Notify-Characteristic ${uuid} nicht verfügbar`)
     }
   }
 
@@ -47,16 +49,21 @@ async function resolveNinebotProfile(
 }> {
   let lastError: unknown = null
 
+  bleDebugLog('Suche Ninebot BLE-Profile…')
+
   for (const profile of NINEBOT_BLE_PROFILES) {
     try {
+      bleDebugLog(`Profil testen: ${profile.id} (${profile.serviceUuid})`)
       const service = await gatt.getPrimaryService(profile.serviceUuid)
       const txChar = await service.getCharacteristic(profile.txCharUuid)
+      bleDebugSuccess(`TX-Characteristic: ${profile.txCharUuid}`)
       const rxChar = await resolveNotifyCharacteristic(service, profile.rxCharUuids)
-      console.log('BLE: profile', profile.id, 'service', profile.serviceUuid)
+      bleDebugSuccess(`Profil aktiv: ${profile.id}`)
       return { profile, txChar, rxChar }
     } catch (error) {
       lastError = error
-      console.warn('BLE: profile failed', profile.id, error)
+      bleDebugWarn(`Profil ${profile.id} fehlgeschlagen`)
+      bleDebugError(`Profil ${profile.id}`, error)
     }
   }
 
@@ -68,6 +75,8 @@ async function resolveNinebotProfile(
 export async function connectToScooter(
   deviceNameHint?: string,
 ): Promise<ConnectedScooter> {
+  bleDebugLog('Öffne BLE-Geräteauswahl…')
+
   const device = await navigator.bluetooth.requestDevice({
     filters: NINEBOT_BLE_SERVICE_UUIDS.map((serviceUuid) => ({ services: [serviceUuid] })),
     optionalServices: NINEBOT_BLE_SERVICE_UUIDS,
@@ -77,22 +86,28 @@ export async function connectToScooter(
   if (!deviceName) {
     throw new Error('BLE-Gerätename fehlt — Handshake nicht möglich')
   }
-  console.log('BLE: device selected', { id: device.id, name: deviceName })
 
-  const server = device.gatt?.connect()
-  if (!server) {
+  bleDebugSuccess(`Gerät gewählt: ${deviceName} (ID: ${device.id})`)
+
+  if (!device.gatt) {
     throw new Error('GATT nicht verfügbar')
   }
 
-  const gatt = await server
-  console.log('BLE: GATT connected')
+  bleDebugLog('GATT-Verbindung wird aufgebaut…')
+  const gatt = await device.gatt.connect()
+  bleDebugSuccess('GATT connected')
 
   const { profile, txChar, rxChar } = await resolveNinebotProfile(gatt)
 
+  bleDebugLog('Starte Notifications…')
   await rxChar.startNotifications()
-  console.log('BLE: startNotifications done')
+  bleDebugSuccess('Notifications gestartet')
 
+  bleDebugLog(`Starte Handshake (Profil: ${profile.id}, Name: ${deviceName})…`)
   const session = await performHandshake(txChar, rxChar, deviceName)
+  bleDebugSuccess(
+    `Handshake OK — Protokoll: ${session.protocol}, SN: ${session.serial}`,
+  )
 
   return {
     connection: { device, txChar, rxChar, bleProfileId: profile.id },

@@ -1,4 +1,5 @@
 import { ADDR, USE_MOCK } from '../ble/constants.ts'
+import { bleDebugError, bleDebugLog, bleDebugSuccess, bleDebugWarn } from '../ble/debug-log.ts'
 import { isNinebotWireFrameComplete, sendAndWaitForEncryptedFrame } from '../ble/receive.ts'
 import {
   APP_ADDR,
@@ -70,7 +71,7 @@ async function exchangeG30PreComm(
   const preCommFrame = buildFrame(ADDR.BLE, APP_ADDR[PROTOCOL_G30], CMD_G30.PRE_COMM, challenge)
   const preCommWire = await encryptBootstrapFrame(bootstrapKey, preCommFrame, ecbInput)
 
-  console.log(`BLE: PRE_COMM sent (${label}, g30)`)
+  bleDebugLog(`PRE_COMM gesendet (${label}, G30)`)
   const preCommResponseWire = await sendAndWaitForEncryptedFrame(
     tx,
     rx,
@@ -83,7 +84,7 @@ async function exchangeG30PreComm(
     preCommResponseWire,
     ecbInput,
   )
-  console.log(`BLE: PRE_COMM response received (${label}, g30)`)
+  bleDebugSuccess(`PRE_COMM Antwort (${label}, G30) — SN wird geparst`)
 
   const preCommParsed = parseFrame(preCommPlain)
   if (
@@ -118,7 +119,7 @@ async function exchangeEncryption2PreComm(
   )
   const preCommWire = await encryptBootstrapFrame(bootstrapKey, preCommFrame, ecbInput)
 
-  console.log(`BLE: PRE_COMM sent (${label}, encryption2)`)
+  bleDebugLog(`PRE_COMM gesendet (${label}, Encryption2)`)
   const preCommResponseWire = await sendAndWaitForEncryptedFrame(
     tx,
     rx,
@@ -131,7 +132,7 @@ async function exchangeEncryption2PreComm(
     preCommResponseWire,
     ecbInput,
   )
-  console.log(`BLE: PRE_COMM response received (${label}, encryption2)`)
+  bleDebugSuccess(`PRE_COMM Antwort (${label}, Encryption2) — SN wird geparst`)
 
   const preCommParsed = parseEncryption2Frame(preCommPlain)
   if (
@@ -166,7 +167,8 @@ async function performG30Handshake(
     if (gen2Message.includes('Timeout')) {
       throw gen2Error
     }
-    console.warn('BLE: PRE_COMM g30 gen2 failed, retrying gen3', gen2Error)
+    bleDebugWarn(`PRE_COMM G30 gen2 fehlgeschlagen — Retry gen3`)
+    bleDebugError('PRE_COMM G30 gen2', gen2Error)
     preComm = await exchangeG30PreComm(tx, rx, deviceName, NULL_CHALLENGE, 'gen3')
   }
 
@@ -184,7 +186,7 @@ async function performG30Handshake(
   )
   counter = afterSetPwd
 
-  console.log('BLE: SET_PWD sent (g30)')
+  bleDebugLog('SET_PWD gesendet (G30)')
   const setPwdResponseWire = await sendAndWaitForEncryptedFrame(
     tx,
     rx,
@@ -195,7 +197,7 @@ async function performG30Handshake(
   const { plaintext: setPwdPlain, recvCounter: afterSetPwdRx } =
     await unwrapEncryptedFrame(phaseKey, counter, setPwdResponseWire, authParam)
   counter = afterSetPwdRx
-  console.log('BLE: SET_PWD response received (g30)')
+  bleDebugSuccess('SET_PWD Antwort (G30)')
 
   const setPwdParsed = parseFrame(setPwdPlain)
   if (setPwdParsed === null || setPwdParsed.cmd !== CMD_G30.SET_PWD) {
@@ -216,7 +218,7 @@ async function performG30Handshake(
   )
   counter = afterAuth
 
-  console.log('BLE: AUTH sent (g30)')
+  bleDebugLog('AUTH gesendet (G30)')
   const authResponseWire = await sendAndWaitForEncryptedFrame(
     tx,
     rx,
@@ -226,7 +228,7 @@ async function performG30Handshake(
   )
   const { plaintext: authPlain, recvCounter: finalCounter } =
     await unwrapEncryptedFrame(sessionKey, counter, authResponseWire, authParam)
-  console.log('BLE: AUTH response received - handshake complete (g30)')
+  bleDebugSuccess('AUTH Antwort — Handshake complete (G30)')
 
   const authParsed = parseFrame(authPlain)
   if (authParsed === null || authParsed.cmd !== CMD_G30.AUTH) {
@@ -263,7 +265,8 @@ async function performEncryption2Handshake(
     if (gen3Message.includes('Timeout')) {
       throw gen3Error
     }
-    console.warn('BLE: PRE_COMM encryption2 gen3 failed, retrying gen2', gen3Error)
+    bleDebugWarn('PRE_COMM Encryption2 gen3 fehlgeschlagen — Retry gen2')
+    bleDebugError('PRE_COMM Encryption2 gen3', gen3Error)
     preComm = await exchangeEncryption2PreComm(tx, rx, deviceName, FW_DATA, 'gen2')
   }
 
@@ -286,7 +289,7 @@ async function performEncryption2Handshake(
   )
   counter = afterSetPwd
 
-  console.log('BLE: SET_PWD sent (encryption2)')
+  bleDebugLog('SET_PWD gesendet (Encryption2)')
   const setPwdResponseWire = await sendAndWaitForEncryptedFrame(
     tx,
     rx,
@@ -297,7 +300,7 @@ async function performEncryption2Handshake(
   const { plaintext: setPwdPlain, recvCounter: afterSetPwdRx } =
     await unwrapEncryptedFrame(phaseKey, counter, setPwdResponseWire, authParam)
   counter = afterSetPwdRx
-  console.log('BLE: SET_PWD response received (encryption2)')
+  bleDebugSuccess('SET_PWD Antwort (Encryption2)')
 
   const setPwdParsed = parseEncryption2Frame(setPwdPlain)
   if (setPwdParsed === null || setPwdParsed.cmd !== CMD_E2.SET_PWD) {
@@ -322,7 +325,7 @@ async function performEncryption2Handshake(
   )
   counter = afterAuth
 
-  console.log('BLE: AUTH sent (encryption2)')
+  bleDebugLog('AUTH gesendet (Encryption2)')
   const authResponseWire = await sendAndWaitForEncryptedFrame(
     tx,
     rx,
@@ -332,7 +335,7 @@ async function performEncryption2Handshake(
   )
   const { plaintext: authPlain, recvCounter: finalCounter } =
     await unwrapEncryptedFrame(sessionKey, counter, authResponseWire, authParam)
-  console.log('BLE: AUTH response received - handshake complete (encryption2)')
+  bleDebugSuccess('AUTH Antwort — Handshake complete (Encryption2)')
 
   const authParsed = parseEncryption2Frame(authPlain)
   if (authParsed === null || authParsed.cmd !== CMD_E2.AUTH) {
@@ -362,20 +365,22 @@ export async function performHandshake(
   deviceName: string,
 ): Promise<SessionState> {
   if (USE_MOCK) {
-    console.log('BLE: mock mode — using G30 handshake')
+    bleDebugLog('Mock-Modus — G30 Handshake')
     return performG30Handshake(tx, rx, deviceName)
   }
 
-  console.log('BLE: trying Encryption2 handshake (Max G3)')
+  bleDebugLog('Versuche Encryption2 Handshake (Max G3)…')
   try {
     return await performEncryption2Handshake(tx, rx, deviceName)
   } catch (encryption2Error) {
-    console.warn('BLE: Encryption2 handshake failed, trying G30', encryption2Error)
+    bleDebugError('Encryption2 Handshake', encryption2Error)
     if (!isTimeoutError(encryption2Error)) {
-      console.log('BLE: non-timeout Encryption2 error — still trying G30 fallback')
+      bleDebugWarn('Encryption2 fehlgeschlagen — Fallback auf G30')
+    } else {
+      bleDebugWarn('Encryption2 Timeout — Fallback auf G30')
     }
   }
 
-  console.log('BLE: trying G30 handshake')
+  bleDebugLog('Versuche G30 Handshake…')
   return performG30Handshake(tx, rx, deviceName)
 }

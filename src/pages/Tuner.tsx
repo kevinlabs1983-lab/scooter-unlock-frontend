@@ -6,6 +6,7 @@ import {
   RotateCcw,
 } from 'lucide-react'
 import { BrowserCheck } from '../components/BrowserCheck.tsx'
+import { BleConnectDebug } from '../components/BleConnectDebug.tsx'
 import { ConnectButton } from '../components/ConnectButton.tsx'
 import { FlashProgress } from '../components/FlashProgress.tsx'
 import { FirmwarePatcher } from '../components/FirmwarePatcher.tsx'
@@ -245,6 +246,7 @@ export default function Tuner() {
             </div>
 
             <ConnectButton onContinue={handleAdvanceToDevice} />
+            <BleConnectDebug />
             <BrowserCheck />
           </section>
         )}
