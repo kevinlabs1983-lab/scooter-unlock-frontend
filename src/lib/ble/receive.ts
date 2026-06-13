@@ -23,18 +23,30 @@ function appendBuffer(existing: Uint8Array, chunk: Uint8Array): Uint8Array {
   return merged
 }
 
-/** Prüft ob ein Ninebot Wire-Frame (0x55 0xAA) vollständig empfangen wurde. */
+/** Prüft ob ein Ninebot Wire-Frame vollständig empfangen wurde (G30 oder Encryption2). */
 export function isNinebotWireFrameComplete(buffer: Uint8Array): boolean {
-  if (buffer.length < 11 || buffer[0] !== 0x55 || buffer[1] !== 0xaa) {
+  if (buffer.length < 9) {
     return false
   }
 
+  const magic0 = buffer[0]!
+  const magic1 = buffer[1]!
   const len = buffer[2] ?? 0
-  if (len < 3) {
-    return false
+
+  if (magic0 === 0x55 && magic1 === 0xaa) {
+    return len >= 3 && buffer.length >= len + 11
   }
 
-  return buffer.length >= len + 11
+  if (magic0 === 0x5a && magic1 === 0xa5) {
+    // Bootstrap-Klartext-Frames (LEN >= 4): 3 + (LEN+2) + 6
+    if (len >= 4 && buffer.length >= len + 11) {
+      return true
+    }
+    // SN-verschlüsselte Frames: 3 + LEN + 6
+    return buffer.length >= len + 9
+  }
+
+  return false
 }
 
 /**

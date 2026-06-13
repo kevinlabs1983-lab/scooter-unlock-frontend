@@ -1,5 +1,5 @@
 import { ADDR } from '../ble/constants.ts'
-import { buildFrame, parseFrame } from '../ble/framing.ts'
+import { buildProtocolFrame, parseProtocolFrame } from '../ble/frame-utils.ts'
 import { sendAndWaitForEncryptedFrame, isNinebotWireFrameComplete } from '../ble/receive.ts'
 import { unwrapEncryptedFrame, wrapEncryptedFrame } from '../crypto/aes.ts'
 import type { SessionState } from '../crypto/handshake.ts'
@@ -60,7 +60,7 @@ export async function exchangeFrame(
 
   session.counter = recvCounter
 
-  const parsed = parseFrame(responsePlain)
+  const parsed = parseProtocolFrame(session.protocol, responsePlain)
   if (parsed === null) {
     throw new Error('Ungültige Antwort')
   }
@@ -114,9 +114,9 @@ export async function readRegister(
   register: number,
   length: number,
 ): Promise<Uint8Array> {
-  const frame = buildFrame(
+  const frame = buildProtocolFrame(
+    session.protocol,
     board,
-    ADDR.APP,
     CMD_READ,
     buildReadPayload(register, length),
   )
@@ -138,9 +138,9 @@ export async function writeRegister(
   register: number,
   data: Uint8Array,
 ): Promise<boolean> {
-  const frame = buildFrame(
+  const frame = buildProtocolFrame(
+    session.protocol,
     board,
-    ADDR.APP,
     CMD_WRITE,
     buildWritePayload(register, data),
   )

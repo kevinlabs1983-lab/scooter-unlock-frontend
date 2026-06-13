@@ -1,5 +1,5 @@
 import { ADDR } from '../ble/constants.ts'
-import { buildFrame } from '../ble/framing.ts'
+import { buildProtocolFrame } from '../ble/frame-utils.ts'
 import type { SessionState } from '../crypto/handshake.ts'
 import {
   BLE_FIRMWARE_VERSION,
@@ -84,7 +84,7 @@ async function sendIapCommand(
   cmd: number,
   data: Uint8Array,
 ): Promise<{ cmd: number; data: Uint8Array }> {
-  const frame = buildFrame(board, ADDR.APP, cmd, data)
+  const frame = buildProtocolFrame(session.protocol, board, cmd, data)
   return exchangeFrame(session, frame, CHUNK_TIMEOUT_MS)
 }
 

@@ -57,5 +57,6 @@ export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true'
 export const SCOOTER_MODELS: Record<string, string> = {
   'NBx-': 'Ninebot Max G30 Serie',
   'NB-': 'Ninebot F/G2 Serie',
+  'NBE-': 'Ninebot Max G3 Serie',
   'YDx-': 'Xiaomi M365 Serie',
 }
