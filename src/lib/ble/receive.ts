@@ -35,16 +35,12 @@ export function isNinebotWireFrameComplete(buffer: Uint8Array): boolean {
   const len = buffer[2] ?? 0
 
   if (magic0 === 0x55 && magic1 === 0xaa) {
-    return len >= 3 && buffer.length >= len + 11
+    return len >= 3 && buffer.length >= len + 9
   }
 
   if (magic0 === 0x5a && magic1 === 0xa5) {
-    // Bootstrap-Klartext-Frames (LEN >= 4): 3 + (LEN+2) + 6
-    if (len >= 4 && buffer.length >= len + 11) {
-      return true
-    }
-    // SN-verschlüsselte Frames: 3 + LEN + 6
-    return buffer.length >= len + 9
+    // Bootstrap + SN: 3 Header + len Bytes Payload + 6 Tail
+    return len >= 4 && buffer.length >= len + 9
   }
 
   return false

@@ -31,9 +31,14 @@ export const BOARD = {
 } as const
 
 export const APP_ADDR = {
+  /** G30 / 0x55 0xAA */
   [PROTOCOL_G30]: 0x3b,
-  [PROTOCOL_ENCRYPTION2]: 0x04,
+  /** NinebotCrypto / Max G3 — Primär 0x21 laut ProtocolNinebot.kt */
+  [PROTOCOL_ENCRYPTION2]: 0x21,
 } as const
+
+/** Fallback für neuere Segway-Dokumentation (E-Series / Gen3-Dokumentation) */
+export const APP_ADDR_E2_FALLBACK = 0x04
 
 export function detectProtocolFromWire(buffer: Uint8Array): NinebotProtocol | null {
   if (buffer.length < 2) {

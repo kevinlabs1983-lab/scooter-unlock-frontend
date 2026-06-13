@@ -272,6 +272,7 @@ export async function unwrapEncryptedFrame(
 
 /**
  * Verschlüsselt einen Frame vor dem SN-Modus (Handshake Phase 1).
+ * Checksum wird nur über den Klartext-Body (ohne CK-Bytes) berechnet — wie NinebotCrypto.
  */
 export async function encryptBootstrapFrame(
   key: CryptoKey,
@@ -279,28 +280,30 @@ export async function encryptBootstrapFrame(
   ecbInput: Uint8Array,
 ): Promise<Uint8Array> {
   const header = plaintext.slice(0, 3)
-  const payload = plaintext.slice(3)
+  const len = plaintext[2] ?? 0
+  const bodyEnd = 3 + len
+  const body = plaintext.slice(3, bodyEnd)
   const keystream = await aesEcbBlock(key, padTo16(ecbInput))
 
-  const encryptedPayload = new Uint8Array(payload.length)
+  const encryptedBody = new Uint8Array(body.length)
   let offset = 0
-  while (offset < payload.length) {
-    const chunkLen = Math.min(16, payload.length - offset)
+  while (offset < body.length) {
+    const chunkLen = Math.min(16, body.length - offset)
     for (let i = 0; i < chunkLen; i++) {
-      encryptedPayload[offset + i] = payload[offset + i]! ^ keystream[i]!
+      encryptedBody[offset + i] = body[offset + i]! ^ keystream[i]!
     }
     offset += chunkLen
   }
 
   let checksum = 0
-  for (const byte of payload) {
+  for (const byte of body) {
     checksum = (checksum + byte) & 0xffff
   }
-  checksum = (~checksum) & 0xffff
+  checksum = (~checksum + 1) & 0xffff
 
-  const wire = new Uint8Array(3 + encryptedPayload.length + 6)
+  const wire = new Uint8Array(3 + encryptedBody.length + 6)
   wire.set(header, 0)
-  wire.set(encryptedPayload, 3)
+  wire.set(encryptedBody, 3)
   wire[wire.length - 6] = 0x00
   wire[wire.length - 5] = 0x00
   wire[wire.length - 4] = checksum & 0xff
@@ -323,29 +326,33 @@ export async function decryptBootstrapFrame(
   const encBody = cipherframe.slice(3, -6)
   const keystream = await aesEcbBlock(key, padTo16(ecbInput))
 
-  const payload = new Uint8Array(encBody.length)
+  const body = new Uint8Array(encBody.length)
   let offset = 0
   while (offset < encBody.length) {
     const chunkLen = Math.min(16, encBody.length - offset)
     for (let i = 0; i < chunkLen; i++) {
-      payload[offset + i] = encBody[offset + i]! ^ keystream[i]!
+      body[offset + i] = encBody[offset + i]! ^ keystream[i]!
     }
     offset += chunkLen
   }
 
   let expectedChecksum = 0
-  for (const byte of payload) {
+  for (const byte of body) {
     expectedChecksum = (expectedChecksum + byte) & 0xffff
   }
-  expectedChecksum = (~expectedChecksum) & 0xffff
+  expectedChecksum = (~expectedChecksum + 1) & 0xffff
   const recvChecksum = tail[2]! | (tail[3]! << 8)
   if (expectedChecksum !== recvChecksum) {
     throw new Error('Bootstrap-Checksum ungültig')
   }
 
-  const plaintext = new Uint8Array(3 + payload.length)
+  const ck0 = recvChecksum & 0xff
+  const ck1 = (recvChecksum >> 8) & 0xff
+  const plaintext = new Uint8Array(3 + body.length + 2)
   plaintext.set(header, 0)
-  plaintext.set(payload, 3)
+  plaintext.set(body, 3)
+  plaintext[plaintext.length - 2] = ck0
+  plaintext[plaintext.length - 1] = ck1
   return plaintext
 }
 

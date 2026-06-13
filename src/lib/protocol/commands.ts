@@ -119,6 +119,8 @@ export async function readRegister(
     board,
     CMD_READ,
     buildReadPayload(register, length),
+    0,
+    session.encryption2AppAddr,
   )
   const response = await exchangeFrame(session, frame)
 
@@ -143,6 +145,8 @@ export async function writeRegister(
     board,
     CMD_WRITE,
     buildWritePayload(register, data),
+    0,
+    session.encryption2AppAddr,
   )
   const response = await exchangeFrame(session, frame)
 

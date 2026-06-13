@@ -9,8 +9,13 @@ import {
   type NinebotProtocol,
 } from '../ble/frame-utils.ts'
 import { buildFrame, parseFrame } from '../ble/framing.ts'
-import { parseEncryption2Frame } from '../ble/framing-encryption2.ts'
-import { CMD_E2, CMD_G30 } from '../ble/protocol-types.ts'
+import { buildEncryption2Frame, parseEncryption2Frame } from '../ble/framing-encryption2.ts'
+import {
+  APP_ADDR_E2_FALLBACK,
+  BOARD,
+  CMD_E2,
+  CMD_G30,
+} from '../ble/protocol-types.ts'
 import {
   decryptBootstrapFrame,
   deriveAuthToken,
@@ -25,6 +30,8 @@ import { FW_DATA, HANDSHAKE_ACCEPTED, NULL_CHALLENGE } from './constants.ts'
 
 export interface SessionState {
   protocol: NinebotProtocol
+  /** App-Adresse für Encryption2 (0x21 Max G3, ggf. 0x04 Fallback) */
+  encryption2AppAddr?: number
   key: CryptoKey
   counter: number
   serial: string
@@ -108,18 +115,22 @@ async function exchangeEncryption2PreComm(
   rx: BluetoothRemoteGATTCharacteristic,
   deviceName: string,
   ecbInput: Uint8Array,
+  appAddr: number,
   label: string,
 ): Promise<PreCommResult> {
-  const bootstrapKey = await deriveSessionKey(deviceName, NULL_CHALLENGE)
-  const preCommFrame = buildBleBoardFrame(
-    PROTOCOL_ENCRYPTION2,
+  const bootstrapKey = await deriveSessionKey(deviceName, FW_DATA)
+  const preCommFrame = buildEncryption2Frame(
+    BOARD.BLE,
+    appAddr,
     CMD_E2.PRE_COMM,
     new Uint8Array(0),
     0,
   )
   const preCommWire = await encryptBootstrapFrame(bootstrapKey, preCommFrame, ecbInput)
 
-  bleDebugLog(`PRE_COMM gesendet (${label}, Encryption2)`)
+  bleDebugLog(
+    `PRE_COMM gesendet (${label}, Encryption2, App=0x${appAddr.toString(16).padStart(2, '0')})`,
+  )
   const preCommResponseWire = await sendAndWaitForEncryptedFrame(
     tx,
     rx,
@@ -255,19 +266,38 @@ async function performEncryption2Handshake(
   deviceName: string,
 ): Promise<SessionState> {
   let counter = 0
-  let preComm: PreCommResult
+  let preComm: PreCommResult | undefined
+  let appAddr: number = APP_ADDR[PROTOCOL_ENCRYPTION2]
 
-  try {
-    preComm = await exchangeEncryption2PreComm(tx, rx, deviceName, NULL_CHALLENGE, 'gen3')
-  } catch (gen3Error) {
-    const gen3Message =
-      gen3Error instanceof Error ? gen3Error.message : String(gen3Error)
-    if (gen3Message.includes('Timeout')) {
-      throw gen3Error
+  const preCommAttempts: Array<{ app: number; ecb: Uint8Array; label: string }> = [
+    { app: APP_ADDR[PROTOCOL_ENCRYPTION2], ecb: FW_DATA, label: 'app=0x21 fw' },
+    { app: APP_ADDR_E2_FALLBACK, ecb: FW_DATA, label: 'app=0x04 fw' },
+    { app: APP_ADDR[PROTOCOL_ENCRYPTION2], ecb: NULL_CHALLENGE, label: 'app=0x21 zero' },
+    { app: APP_ADDR_E2_FALLBACK, ecb: NULL_CHALLENGE, label: 'app=0x04 zero' },
+  ]
+
+  let lastError: unknown = new Error('PRE_COMM Encryption2 — keine Versuche')
+  for (const attempt of preCommAttempts) {
+    try {
+      preComm = await exchangeEncryption2PreComm(
+        tx,
+        rx,
+        deviceName,
+        attempt.ecb,
+        attempt.app,
+        attempt.label,
+      )
+      appAddr = attempt.app
+      break
+    } catch (error) {
+      lastError = error
+      bleDebugWarn(`PRE_COMM ${attempt.label} fehlgeschlagen`)
+      bleDebugError(`PRE_COMM ${attempt.label}`, error)
     }
-    bleDebugWarn('PRE_COMM Encryption2 gen3 fehlgeschlagen — Retry gen2')
-    bleDebugError('PRE_COMM Encryption2 gen3', gen3Error)
-    preComm = await exchangeEncryption2PreComm(tx, rx, deviceName, FW_DATA, 'gen2')
+  }
+
+  if (!preComm) {
+    throw lastError instanceof Error ? lastError : new Error(String(lastError))
   }
 
   const { authParam, serial } = preComm
@@ -280,6 +310,7 @@ async function performEncryption2Handshake(
     CMD_E2.SET_PWD,
     sessionPassword,
     0,
+    appAddr,
   )
   const { wire: setPwdWire, nextCounter: afterSetPwd } = await wrapEncryptedFrame(
     phaseKey,
@@ -316,6 +347,7 @@ async function performEncryption2Handshake(
     CMD_E2.AUTH,
     encodeSerialField(serial, 14),
     0,
+    appAddr,
   )
   const { wire: authWire, nextCounter: afterAuth } = await wrapEncryptedFrame(
     sessionKey,
@@ -347,6 +379,7 @@ async function performEncryption2Handshake(
 
   return {
     protocol: PROTOCOL_ENCRYPTION2,
+    encryption2AppAddr: appAddr,
     key: sessionKey,
     counter: finalCounter,
     serial,

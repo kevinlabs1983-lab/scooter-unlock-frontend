@@ -84,7 +84,14 @@ async function sendIapCommand(
   cmd: number,
   data: Uint8Array,
 ): Promise<{ cmd: number; data: Uint8Array }> {
-  const frame = buildProtocolFrame(session.protocol, board, cmd, data)
+  const frame = buildProtocolFrame(
+    session.protocol,
+    board,
+    cmd,
+    data,
+    0,
+    session.encryption2AppAddr,
+  )
   return exchangeFrame(session, frame, CHUNK_TIMEOUT_MS)
 }
 

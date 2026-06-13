@@ -18,9 +18,11 @@ export function buildProtocolFrame(
   cmd: number,
   data: Uint8Array,
   index = 0,
+  encryption2AppAddr?: number,
 ): Uint8Array {
   if (protocol === PROTOCOL_ENCRYPTION2) {
-    return buildEncryption2Frame(board, APP_ADDR[PROTOCOL_ENCRYPTION2], cmd, data, index)
+    const app = encryption2AppAddr ?? APP_ADDR[PROTOCOL_ENCRYPTION2]
+    return buildEncryption2Frame(board, app, cmd, data, index)
   }
   return buildFrame(board, APP_ADDR[PROTOCOL_G30], cmd, data)
 }
@@ -41,8 +43,9 @@ export function buildBleBoardFrame(
   cmd: number,
   data: Uint8Array,
   index = 0,
+  encryption2AppAddr?: number,
 ): Uint8Array {
-  return buildProtocolFrame(protocol, BOARD.BLE, cmd, data, index)
+  return buildProtocolFrame(protocol, BOARD.BLE, cmd, data, index, encryption2AppAddr)
 }
 
 export { BOARD, APP_ADDR, PROTOCOL_G30, PROTOCOL_ENCRYPTION2 }

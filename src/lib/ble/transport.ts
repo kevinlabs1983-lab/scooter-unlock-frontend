@@ -101,7 +101,8 @@ export async function connectToScooter(
 
   bleDebugLog('Starte Notifications…')
   await rxChar.startNotifications()
-  bleDebugSuccess('Notifications gestartet')
+  await new Promise((resolve) => setTimeout(resolve, 150))
+  bleDebugSuccess('Notifications gestartet (150ms stabilisiert)')
 
   bleDebugLog(`Starte Handshake (Profil: ${profile.id}, Name: ${deviceName})…`)
   const session = await performHandshake(txChar, rxChar, deviceName)
