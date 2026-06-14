@@ -1,4 +1,5 @@
 import { DEFAULT_PRODUCTION_API_BASE, getApiBase } from '../api.ts'
+import { NORDIC_UART_TX_CHAR_UUID, NORDIC_UART_RX_CHAR_UUID } from './constants.ts'
 import { PROTOCOL_ENCRYPTION2, type NinebotProtocol } from './protocol-types.ts'
 import { bleDebugError, bleDebugLog, bleDebugSuccess, bleDebugWarn, bytesToHex } from './debug-log.ts'
 import type { SessionState } from '../crypto/handshake.ts'
@@ -7,6 +8,12 @@ import { useBluetoothStore } from '../../store/bluetoothStore.ts'
 
 const CHUNK_SIZE = 20
 const CHUNK_DELAY_MS = 50
+/** Wartezeit nach Notify-Listener, bevor das Backend den ersten WRITE sendet. */
+const NOTIFY_BEFORE_WRITE_DELAY_MS = 200
+/** Backend PRE_COMM-Notify-Timeout (muss mit bleSession.ts übereinstimmen). */
+export const RELAY_NOTIFY_TIMEOUT_MS = 15_000
+
+const PRE_COMM_WIRE_PREFIX = '5aa5003e215b00'
 
 export interface BleRelayTransport {
   device: BluetoothDevice
@@ -73,7 +80,26 @@ async function sendBleFrame(
     data.byteOffset,
     data.byteOffset + data.byteLength,
   ) as ArrayBuffer
-  await char.writeValueWithoutResponse(buffer)
+  const writeUuid = char.uuid.toLowerCase()
+  const isPreComm =
+    data.length >= 7 &&
+    bytesToHex(data.slice(0, 7)).toLowerCase().startsWith(PRE_COMM_WIRE_PREFIX)
+
+  try {
+    await char.writeValueWithoutResponse(buffer)
+    if (writeUuid.includes('6e400002') || writeUuid === NORDIC_UART_TX_CHAR_UUID) {
+      bleDebugLog('WRITE erfolgreich auf 6e400002')
+    } else {
+      bleDebugSuccess(`WRITE erfolgreich auf ${writeUuid}`)
+    }
+    if (isPreComm) {
+      bleDebugLog(`PRE_COMM WRITE abgeschlossen (${data.length} B) — warte NOTIFY (max ${RELAY_NOTIFY_TIMEOUT_MS}ms)`)
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    bleDebugLog(`WRITE FEHLER: ${detail}`, 'error')
+    throw error
+  }
 }
 
 async function writeBleChunks(
@@ -114,8 +140,39 @@ export async function connectViaBleRelay(
   const wsUrl = getBleRelayWsUrl(licenseKey)
   bleDebugLog(`BLE-Relay: WebSocket ${wsUrl.replace(licenseKey, '***')}`)
 
-  const ws = new WebSocket(wsUrl)
+  let ws: WebSocket | undefined
+
+  const notifyHandler = (event: Event) => {
+    const target = event.target as BluetoothRemoteGATTCharacteristic
+    if (!target.value) {
+      return
+    }
+    const { buffer, byteOffset, byteLength } = target.value
+    const bytes = new Uint8Array(buffer, byteOffset, byteLength)
+    const hex = bytesToHex(bytes)
+    bleDebugLog(`RAW NOTIFY: ${hex}`)
+
+    if (ws?.readyState !== WebSocket.OPEN) {
+      return
+    }
+
+    bleDebugLog(`BLE-Relay: NOTIFY (${bytes.length} B): ${hex}`)
+    ws.send(JSON.stringify({ type: 'notify', data: hex.toLowerCase() }))
+  }
+
+  rxChar.addEventListener('characteristicvaluechanged', notifyHandler)
+  const rxUuid = rxChar.uuid.toLowerCase()
+  if (rxUuid.includes('6e400003') || rxUuid === NORDIC_UART_RX_CHAR_UUID) {
+    bleDebugSuccess(`Notify-Subscription aktiv auf 6e400003 (${rxUuid})`)
+  } else {
+    bleDebugSuccess(`Notify-Subscription aktiv auf ${rxUuid}`)
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, NOTIFY_BEFORE_WRITE_DELAY_MS))
+  bleDebugLog(`Notify stabilisiert (${NOTIFY_BEFORE_WRITE_DELAY_MS}ms) — erster WRITE folgt`)
+
   let handshakeDone = false
+  ws = new WebSocket(wsUrl)
 
   const relayPromise = new Promise<RelayResultParams>((resolve, reject) => {
     const fail = (message: string) => {
@@ -127,7 +184,7 @@ export async function connectViaBleRelay(
 
     ws.onopen = () => {
       bleDebugSuccess('BLE-Relay: WebSocket verbunden')
-      ws.send(JSON.stringify({ type: 'ready', deviceName }))
+      ws!.send(JSON.stringify({ type: 'ready', deviceName }))
     }
 
     ws.onmessage = async (event) => {
@@ -189,20 +246,6 @@ export async function connectViaBleRelay(
     }
   })
 
-  const notifyHandler = (event: Event) => {
-    const target = event.target as BluetoothRemoteGATTCharacteristic
-    if (!target.value || ws.readyState !== WebSocket.OPEN) {
-      return
-    }
-    const { buffer, byteOffset, byteLength } = target.value
-    const bytes = new Uint8Array(buffer, byteOffset, byteLength)
-    const hex = bytesToHex(bytes).toLowerCase()
-    bleDebugLog(`BLE-Relay: NOTIFY (${bytes.length} B): ${bytesToHex(bytes)}`)
-    ws.send(JSON.stringify({ type: 'notify', data: hex }))
-  }
-
-  rxChar.addEventListener('characteristicvaluechanged', notifyHandler)
-
   try {
     const relayResult = await relayPromise
     if (!relayResult.serial) {
@@ -222,7 +265,7 @@ export async function connectViaBleRelay(
         patchConfig: relayResult.patchConfig,
         relayResult,
       },
-      ws,
+      ws: ws!,
     }
   } finally {
     rxChar.removeEventListener('characteristicvaluechanged', notifyHandler)
