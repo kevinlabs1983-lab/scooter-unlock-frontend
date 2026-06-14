@@ -1,6 +1,9 @@
 import { DEFAULT_PRODUCTION_API_BASE, getApiBase } from '../api.ts'
 import { NORDIC_UART_TX_CHAR_UUID, NORDIC_UART_RX_CHAR_UUID } from './constants.ts'
-import { PROTOCOL_ENCRYPTION2, type NinebotProtocol } from './protocol-types.ts'
+import {
+  buildEncryption2PlainFrame,
+} from './framing-encryption2.ts'
+import { CMD_E2, PROTOCOL_ENCRYPTION2, type NinebotProtocol } from './protocol-types.ts'
 import { bleDebugError, bleDebugLog, bleDebugSuccess, bleDebugWarn, bytesToHex } from './debug-log.ts'
 import type { SessionState } from '../crypto/handshake.ts'
 import type { PatchConfig } from '../firmware-patcher.ts'
@@ -12,8 +15,88 @@ const CHUNK_DELAY_MS = 50
 const NOTIFY_BEFORE_WRITE_DELAY_MS = 200
 /** Backend PRE_COMM-Notify-Timeout (muss mit bleSession.ts übereinstimmen). */
 export const RELAY_NOTIFY_TIMEOUT_MS = 15_000
+/** Lokaler PRE_COMM-Adress-Probe: Wartezeit pro Variante. */
+const PRE_COMM_PROBE_TIMEOUT_MS = 3000
 
 const PRE_COMM_WIRE_PREFIX = '5aa5003e215b00'
+
+/** Legacy PRE_COMM: Phone(0x3D) → ESC(0x20) — Adress-Probe ohne Relay. */
+const LEGACY_PRE_COMM_SRC = 0x3d
+const LEGACY_PRE_COMM_DST = 0x20
+
+function isStandardPreCommFrame(data: Uint8Array): boolean {
+  if (data.length < 9) {
+    return false
+  }
+  return bytesToHex(data.slice(0, 7)).toLowerCase().startsWith(PRE_COMM_WIRE_PREFIX)
+}
+
+function buildLegacyPreCommRequest(): Uint8Array {
+  return buildEncryption2PlainFrame(
+    LEGACY_PRE_COMM_SRC,
+    LEGACY_PRE_COMM_DST,
+    CMD_E2.PRE_COMM,
+    0x00,
+  )
+}
+
+type RawNotifyProbe = (hex: string) => void
+
+let pendingRawNotifyProbe: RawNotifyProbe | null = null
+
+function waitForRawNotify(timeoutMs: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => {
+      if (pendingRawNotifyProbe === onNotify) {
+        pendingRawNotifyProbe = null
+      }
+      resolve(null)
+    }, timeoutMs)
+
+    const onNotify = (hex: string) => {
+      window.clearTimeout(timer)
+      pendingRawNotifyProbe = null
+      resolve(hex)
+    }
+
+    pendingRawNotifyProbe = onNotify
+  })
+}
+
+async function runPreCommAddressProbe(
+  txChar: BluetoothRemoteGATTCharacteristic,
+  standardFrame: Uint8Array,
+): Promise<void> {
+  bleDebugLog('PRE_COMM-Adress-Probe: Variante 1 (Dashboard 0x3E→0x21)')
+  bleDebugLog(`PRE_COMM Probe TX #1: ${bytesToHex(standardFrame)}`)
+
+  const response1 = await waitForRawNotify(PRE_COMM_PROBE_TIMEOUT_MS)
+  if (response1) {
+    bleDebugSuccess(`PRE_COMM Probe RX #1 (${PRE_COMM_PROBE_TIMEOUT_MS}ms): ${response1}`)
+    return
+  }
+
+  bleDebugWarn(
+    `PRE_COMM Probe #1: kein RAW NOTIFY in ${PRE_COMM_PROBE_TIMEOUT_MS}ms — Variante 2 (Legacy 0x3D→0x20)`,
+  )
+
+  const legacyFrame = buildLegacyPreCommRequest()
+  bleDebugLog(`PRE_COMM Probe TX #2 (ohne Relay): ${bytesToHex(legacyFrame)}`)
+
+  try {
+    await sendBleFrame(txChar, legacyFrame, { probe: true })
+  } catch (error) {
+    bleDebugError('PRE_COMM Probe TX #2', error)
+    return
+  }
+
+  const response2 = await waitForRawNotify(PRE_COMM_PROBE_TIMEOUT_MS)
+  if (response2) {
+    bleDebugSuccess(`PRE_COMM Probe RX #2 (${PRE_COMM_PROBE_TIMEOUT_MS}ms): ${response2}`)
+  } else {
+    bleDebugWarn(`PRE_COMM Probe #2: kein RAW NOTIFY in ${PRE_COMM_PROBE_TIMEOUT_MS}ms`)
+  }
+}
 
 export interface BleRelayTransport {
   device: BluetoothDevice
@@ -75,6 +158,7 @@ function hexToBytes(hex: string): Uint8Array {
 async function sendBleFrame(
   char: BluetoothRemoteGATTCharacteristic,
   data: Uint8Array,
+  options: { probe?: boolean } = {},
 ): Promise<void> {
   const buffer = data.buffer.slice(
     data.byteOffset,
@@ -82,6 +166,7 @@ async function sendBleFrame(
   ) as ArrayBuffer
   const writeUuid = char.uuid.toLowerCase()
   const isPreComm =
+    !options.probe &&
     data.length >= 7 &&
     bytesToHex(data.slice(0, 7)).toLowerCase().startsWith(PRE_COMM_WIRE_PREFIX)
 
@@ -93,7 +178,9 @@ async function sendBleFrame(
       bleDebugSuccess(`WRITE erfolgreich auf ${writeUuid}`)
     }
     if (isPreComm) {
-      bleDebugLog(`PRE_COMM WRITE abgeschlossen (${data.length} B) — warte NOTIFY (max ${RELAY_NOTIFY_TIMEOUT_MS}ms)`)
+      bleDebugLog(
+        `PRE_COMM WRITE abgeschlossen (${data.length} B) — warte NOTIFY (max ${RELAY_NOTIFY_TIMEOUT_MS}ms)`,
+      )
     }
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
@@ -141,6 +228,7 @@ export async function connectViaBleRelay(
   bleDebugLog(`BLE-Relay: WebSocket ${wsUrl.replace(licenseKey, '***')}`)
 
   let ws: WebSocket | undefined
+  let preCommProbeStarted = false
 
   const notifyHandler = (event: Event) => {
     const target = event.target as BluetoothRemoteGATTCharacteristic
@@ -151,6 +239,7 @@ export async function connectViaBleRelay(
     const bytes = new Uint8Array(buffer, byteOffset, byteLength)
     const hex = bytesToHex(bytes)
     bleDebugLog(`RAW NOTIFY: ${hex}`)
+    pendingRawNotifyProbe?.(hex)
 
     if (ws?.readyState !== WebSocket.OPEN) {
       return
@@ -214,6 +303,13 @@ export async function connectViaBleRelay(
           const bytes = hexToBytes(message.data)
           bleDebugLog(`BLE-Relay: WRITE (${bytes.length} B): ${bytesToHex(bytes)}`)
           await writeBleChunks(txChar, bytes)
+
+          if (isStandardPreCommFrame(bytes) && !preCommProbeStarted) {
+            preCommProbeStarted = true
+            void runPreCommAddressProbe(txChar, bytes).catch((error) => {
+              bleDebugError('PRE_COMM-Adress-Probe', error)
+            })
+          }
         } catch (error) {
           bleDebugError('BLE-Relay WRITE', error)
         }
@@ -268,6 +364,7 @@ export async function connectViaBleRelay(
       ws: ws!,
     }
   } finally {
+    pendingRawNotifyProbe = null
     rxChar.removeEventListener('characteristicvaluechanged', notifyHandler)
     useBluetoothStore.getState().setShowPowerButtonModal(false)
   }
