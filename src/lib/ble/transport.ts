@@ -25,8 +25,47 @@ export interface ConnectedScooter {
   relayWs?: WebSocket
 }
 
-function isLikelyMaxG3(deviceName: string): boolean {
-  return deviceName.startsWith('NBE-')
+/** Bekannte Max-G3 BLE-Namenspräfixe (Seriennummern-Schema). */
+export const MAX_G3_BLE_PREFIXES = ['NBE-', '1CGBC', 'NBG3-'] as const
+
+export function matchesMaxG3DeviceName(deviceName: string): boolean {
+  return MAX_G3_BLE_PREFIXES.some((prefix) => deviceName.startsWith(prefix))
+}
+
+export function isNbg3LicenseKey(licenseKey?: string): boolean {
+  return licenseKey?.trim().startsWith('NBG3-') ?? false
+}
+
+export type BleRelayReason = 'Gerätename' | 'Lizenzkey' | 'Gerätename + Lizenzkey'
+
+/** Relay wenn Lizenz vorhanden und (G3-Gerätename oder NBG3-Schlüssel). */
+export function shouldUseBleRelay(
+  deviceName: string,
+  licenseKey?: string,
+): { useRelay: boolean; reason: BleRelayReason | null } {
+  const key = licenseKey?.trim()
+  if (!key) {
+    return { useRelay: false, reason: null }
+  }
+
+  const byName = matchesMaxG3DeviceName(deviceName)
+  const byKey = isNbg3LicenseKey(key)
+
+  if (byKey && byName) {
+    return { useRelay: true, reason: 'Gerätename + Lizenzkey' }
+  }
+  if (byKey) {
+    return { useRelay: true, reason: 'Lizenzkey' }
+  }
+  if (byName) {
+    return { useRelay: true, reason: 'Gerätename' }
+  }
+
+  return { useRelay: false, reason: null }
+}
+
+export function logBleRelayMode(reason: BleRelayReason): void {
+  bleDebugLog(`Relay-Modus: JA (Grund: ${reason})`)
 }
 
 async function resolveNotifyCharacteristic(
@@ -123,10 +162,14 @@ export async function connectToScooter(
     bleProfileId: profile.id,
   }
 
-  if (licenseKey && isLikelyMaxG3(deviceName)) {
-    bleDebugLog('Versuche BLE-Relay (Max G3 + Lizenz)…')
+  const relayDecision = shouldUseBleRelay(deviceName, licenseKey)
+  if (relayDecision.useRelay && relayDecision.reason) {
+    if (relayDecision.reason !== 'Lizenzkey') {
+      logBleRelayMode(relayDecision.reason)
+    }
+    bleDebugLog('Versuche BLE-Relay (Max G3)…')
     try {
-      const relay = await connectViaBleRelay(licenseKey, connection, deviceName)
+      const relay = await connectViaBleRelay(licenseKey!.trim(), connection, deviceName)
       bleDebugSuccess(`Relay OK — SN: ${relay.session.serial}`)
       return {
         connection,

@@ -4,7 +4,9 @@ import { connectToMockScooter } from '../lib/ble/mock-device.ts'
 import {
   closeBleRelay,
   connectToScooter,
+  isNbg3LicenseKey,
   isRelaySession,
+  logBleRelayMode,
 } from '../lib/ble/transport.ts'
 import { bleDebugError, bleDebugLog, bleDebugSuccess } from '../lib/ble/debug-log.ts'
 import type { SessionState } from '../lib/crypto/handshake.ts'
@@ -84,6 +86,11 @@ export function useBluetooth() {
     store.setStatus('connecting')
     bleDebugLog('Verbindung gestartet…')
 
+    const trimmedLicense = licenseKey?.trim()
+    if (trimmedLicense && isNbg3LicenseKey(trimmedLicense)) {
+      logBleRelayMode('Lizenzkey')
+    }
+
     try {
       store.setStatus('handshake')
       if (USE_MOCK) {
@@ -98,7 +105,7 @@ export function useBluetooth() {
       } else {
         const { connection, session: sessionState, relayWs } = await connectToScooter(
           undefined,
-          licenseKey?.trim() || undefined,
+          trimmedLicense || undefined,
         )
         connectedDevice = connection.device
         activeRelayWs = relayWs ?? null
