@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { SessionState } from '../lib/crypto/handshake.ts'
+import type { RelaySessionState } from '../lib/ble/bleRelay.ts'
 import type { DeviceInfo } from '../lib/protocol/commands.ts'
 
 export type BluetoothStatus =
@@ -22,18 +23,20 @@ export interface LogEntry {
 interface BluetoothStoreState {
   status: BluetoothStatus
   device: BluetoothDevice | null
-  session: SessionState | null
+  session: SessionState | RelaySessionState | null
   deviceInfo: DeviceInfo | null
   error: string | null
   logs: LogEntry[]
+  showPowerButtonModal: boolean
 }
 
 interface BluetoothStoreActions {
   setStatus: (status: BluetoothStatus) => void
   setDevice: (device: BluetoothDevice | null) => void
-  setSession: (session: SessionState | null) => void
+  setSession: (session: SessionState | RelaySessionState | null) => void
   setDeviceInfo: (deviceInfo: DeviceInfo | null) => void
   setError: (error: string | null) => void
+  setShowPowerButtonModal: (show: boolean) => void
   addLog: (level: LogLevel, message: string) => void
   clearLogs: () => void
   resetConnection: () => void
@@ -46,6 +49,7 @@ const initialState: BluetoothStoreState = {
   deviceInfo: null,
   error: null,
   logs: [],
+  showPowerButtonModal: false,
 }
 
 export const useBluetoothStore = create<BluetoothStoreState & BluetoothStoreActions>(
@@ -56,6 +60,7 @@ export const useBluetoothStore = create<BluetoothStoreState & BluetoothStoreActi
     setSession: (session) => set({ session }),
     setDeviceInfo: (deviceInfo) => set({ deviceInfo }),
     setError: (error) => set({ error }),
+    setShowPowerButtonModal: (showPowerButtonModal) => set({ showPowerButtonModal }),
     addLog: (level, message) =>
       set((state) => ({
         logs: [
@@ -75,6 +80,7 @@ export const useBluetoothStore = create<BluetoothStoreState & BluetoothStoreActi
         session: null,
         deviceInfo: null,
         error: null,
+        showPowerButtonModal: false,
       }),
   }),
 )

@@ -1,5 +1,11 @@
 import { performHandshake, type SessionState } from '../crypto/handshake.ts'
 import {
+  closeBleRelay,
+  connectViaBleRelay,
+  isRelaySession,
+  type RelaySessionState,
+} from './bleRelay.ts'
+import {
   NINEBOT_BLE_PROFILES,
   NINEBOT_BLE_SERVICE_UUIDS,
   type NinebotBleProfile,
@@ -15,7 +21,12 @@ export interface ScooterConnection {
 
 export interface ConnectedScooter {
   connection: ScooterConnection
-  session: SessionState
+  session: SessionState | RelaySessionState
+  relayWs?: WebSocket
+}
+
+function isLikelyMaxG3(deviceName: string): boolean {
+  return deviceName.startsWith('NBE-')
 }
 
 async function resolveNotifyCharacteristic(
@@ -74,6 +85,7 @@ async function resolveNinebotProfile(
 
 export async function connectToScooter(
   deviceNameHint?: string,
+  licenseKey?: string,
 ): Promise<ConnectedScooter> {
   bleDebugLog('Öffne BLE-Geräteauswahl…')
 
@@ -104,16 +116,34 @@ export async function connectToScooter(
   await new Promise((resolve) => setTimeout(resolve, 150))
   bleDebugSuccess('Notifications gestartet (150ms stabilisiert)')
 
-  bleDebugLog(`Starte Handshake (Profil: ${profile.id}, Name: ${deviceName})…`)
-  const session = await performHandshake(txChar, rxChar, deviceName)
-  bleDebugSuccess(
-    `Handshake OK — Protokoll: ${session.protocol}, SN: ${session.serial}`,
-  )
-
-  return {
-    connection: { device, txChar, rxChar, bleProfileId: profile.id },
-    session,
+  const connection: ScooterConnection = {
+    device,
+    txChar,
+    rxChar,
+    bleProfileId: profile.id,
   }
+
+  if (licenseKey && isLikelyMaxG3(deviceName)) {
+    bleDebugLog('Versuche BLE-Relay (Max G3 + Lizenz)…')
+    try {
+      const relay = await connectViaBleRelay(licenseKey, connection, deviceName)
+      bleDebugSuccess(`Relay OK — SN: ${relay.session.serial}`)
+      return {
+        connection,
+        session: relay.session,
+        relayWs: relay.ws,
+      }
+    } catch (relayError) {
+      bleDebugError('BLE-Relay fehlgeschlagen — Fallback lokal', relayError)
+      bleDebugWarn('Fallback auf lokalen Handshake (G30/Encryption2)…')
+    }
+  }
+
+  bleDebugLog(`Starte lokalen Handshake (Profil: ${profile.id}, Name: ${deviceName})…`)
+  const session = await performHandshake(txChar, rxChar, deviceName)
+  bleDebugSuccess(`Handshake OK — Protokoll: ${session.protocol}, SN: ${session.serial}`)
+
+  return { connection, session }
 }
 
 export async function sendFrame(
@@ -139,3 +169,6 @@ export function onNotify(
     }
   })
 }
+
+export { closeBleRelay, isRelaySession }
+export type { RelaySessionState }

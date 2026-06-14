@@ -245,7 +245,10 @@ export default function Tuner() {
               </p>
             </div>
 
-            <ConnectButton onContinue={handleAdvanceToDevice} />
+            <ConnectButton
+              onContinue={handleAdvanceToDevice}
+              licenseKey={licenseKey || urlLicenseKey || undefined}
+            />
             <BleConnectDebug />
             <BrowserCheck />
           </section>

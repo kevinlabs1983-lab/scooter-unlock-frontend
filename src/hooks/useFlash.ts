@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { isRelaySession } from '../lib/ble/bleRelay.ts'
 import {
   flashFirmware,
   verifyFirmware,
@@ -26,6 +27,15 @@ export function useFlash() {
         return
       }
 
+      if (isRelaySession(bluetooth.session)) {
+        flash.setFlashStatus('error')
+        flash.setError('Relay-Modus: Firmware-Flash über Browser noch nicht verfügbar')
+        bluetooth.addLog('error', 'Flash im Relay-Modus nicht unterstützt')
+        return
+      }
+
+      const session = bluetooth.session
+
       flash.resetFlash()
       flash.setFlashStatus('preparing')
       bluetooth.addLog('info', `Firmware-Flash vorbereiten (${target})…`)
@@ -39,7 +49,7 @@ export function useFlash() {
         bluetooth.addLog('info', `Flash gestartet — ${firmwareBlob.length} Bytes`)
 
         const result = await flashFirmware(
-          bluetooth.session,
+          session,
           firmwareBlob,
           target,
           (percent, chunk, total) => {
@@ -63,7 +73,7 @@ export function useFlash() {
         flash.setFlashStatus('verifying')
         bluetooth.addLog('info', 'Firmware wird verifiziert…')
 
-        const verified = await verifyFirmware(bluetooth.session)
+        const verified = await verifyFirmware(session)
         if (!verified) {
           throw new Error('Firmware-Verifikation fehlgeschlagen')
         }

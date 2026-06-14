@@ -25,7 +25,7 @@ function formatTime(timestamp: number): string {
 }
 
 export function BleConnectDebug() {
-  const { logs, clearLogs, status } = useBluetooth()
+  const { logs, clearLogs, status, showPowerButtonModal } = useBluetooth()
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -37,6 +37,15 @@ export function BleConnectDebug() {
 
   return (
     <section className="w-full max-w-md rounded-xl border border-border bg-surface">
+      {showPowerButtonModal && (
+        <div
+          className="border-b border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200"
+          role="alert"
+        >
+          <strong>Power-Taste drücken:</strong> Halte die Ein/Aus-Taste am Roller kurz, damit
+          SET_PWD bestätigt werden kann.
+        </div>
+      )}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
           <Radio className="h-4 w-4 text-accent" aria-hidden />

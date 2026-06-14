@@ -5,9 +5,11 @@ import { useBluetooth } from '../hooks/useBluetooth.ts'
 interface ConnectButtonProps {
   /** Nach erfolgreicher Verbindung — Weiter zum nächsten Wizard-Schritt */
   onContinue?: () => void
+  /** Lizenzschlüssel für BLE-Relay (Max G3) */
+  licenseKey?: string
 }
 
-export function ConnectButton({ onContinue }: ConnectButtonProps) {
+export function ConnectButton({ onContinue, licenseKey }: ConnectButtonProps) {
   const { status, connect, error } = useBluetooth()
   const browserReady = isBrowserReady()
 
@@ -17,7 +19,7 @@ export function ConnectButton({ onContinue }: ConnectButtonProps) {
 
   const handleConnect = () => {
     if (canConnect) {
-      void connect()
+      void connect(licenseKey)
     }
   }
 
